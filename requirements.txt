@@ -1,0 +1,4 @@
+openpyxl
+python-registry
+libesedb-python
+PySimpleGUI

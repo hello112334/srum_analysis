@@ -5,7 +5,7 @@ import pandas as pd
 import binascii
 
 # Excelファイルを読み込む
-wb = openpyxl.load_workbook('SRUM_DUMP_OUTPUT.xlsx')
+wb = openpyxl.load_workbook('./OUTPUT/SRUM_DUMP_OUTPUT.xlsx')
 
 # シート名のリストを取得
 sheet_names = wb.sheetnames
@@ -30,17 +30,14 @@ def main():
             df = pd.read_csv(f"{sheet_name}.csv", names=headers, header=0)
 
             # 空欄を0にする
-            df.fillna("00", inplace=True)
+            # df.fillna("", inplace=True)
 
             # 特定の列を1行ずつ出力する
+            # df['IdBlob_utf8'] = df['IdBlob']
             for index, row in df.iterrows():
-                print(str(row['IdBlob']))
                 res = hex_to_str(str(row['IdBlob']))
-                print(f"{index}:: {df['IdBlob'][index]}....")
                 df['IdBlob'][index] = res
 
-            # df['IdBlob'] = str(df['IdBlob'])
-            # df['IdBlob_new'] = df['IdBlob'].apply(hex_to_str)
             df.to_csv(f"{sheet_name}_ana.csv", index=False)
 
         # CPU/Battery
@@ -50,21 +47,22 @@ def main():
             # シートデータを出力
             write2csv(sheet_name)
 
-            # header = [""]
-
-# applyメソッドを使って16進数表記から文字列に変換する関数を定義
+# 16進数表記から文字列に変換する関数
 def hex_to_str(hex_str):
+    """Converts a hexadecimal string to a UTF-8 string"""
 
-    try:
-        hex_bytes = bytes.fromhex(hex_str)
-        decoded_str = hex_bytes.decode('utf-8')
-        # if type(decoded_str) == "string":
-    except Exception as err1:
-        # print(f"[ERROR] {err1}")
-        return "-"
+    # 16進数表記であり、かつ16進数表記が偶数桁の場合
+    if hex_str and len(hex_str) % 2 == 0:
+        print(f"[INFO] {hex_str}")
+        # 16進数表記をバイナリ表記に変換
+        bin_str = binascii.unhexlify(hex_str)
 
-    return decoded_str
+        # バイナリ表記を文字列に変換
+        str_str = bin_str.decode('utf-8')
 
+        return str_str
+
+    return "-"
 
 def write2csv(sheet_name):
     """note"""

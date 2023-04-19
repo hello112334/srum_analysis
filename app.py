@@ -1,515 +1,427 @@
-from openpyxl.cell import WriteOnlyCell
-from Registry import Registry
-from datetime import datetime,timedelta
-import pyesedb
-import sys
-import struct
-import re
-import openpyxl
-import argparse
-import warnings
-import hashlib
-import random
-import os
-import codecs
-import itertools
-import pathlib
-import uuid
-import webbrowser
-import PySimpleGUI as sg
-import tempfile
-import urllib.request
+"""
+SRUM分析工具
+"""
+import tkinter as tk
+from tkinter import ttk
+# from tkinter import filedialog
+# from tkinter import Frame
+from tkinter import messagebox
+from datetime import datetime
+import pandas as pd
+import matplotlib.pyplot as plt
+# import matplotlib.backends.backend_tkagg as tkagg
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
+from tkcalendar import DateEntry
+import mplcursors
+# import os
 import subprocess
-import ctypes
 
+# 獲取當前日期
+today = datetime.now()
 
-def BinarySIDtoStringSID(sid_str):
-    #Original form Source: https://github.com/google/grr/blob/master/grr/parsers/wmi_parser.py
-    """Converts a binary SID to its string representation.
-     https://msdn.microsoft.com/en-us/library/windows/desktop/aa379597.aspx
-    The byte representation of an SID is as follows:
-      Offset  Length  Description
-      00      01      revision
-      01      01      sub-authority count
-      02      06      authority (big endian)
-      08      04      subauthority #1 (little endian)
-      0b      04      subauthority #2 (little endian)
-      ...
-    Args:
-      sid: A byte array.
-    Returns:
-      SID in string form.
-    Raises:
-      ValueError: If the binary SID is malformed.
+# 將日期格式化為 "yyyymmdd"
+formatted_today = today.strftime("%Y%m%d")
+
+class CustomToolbar(NavigationToolbar2Tk):
     """
-    if not sid_str:
-        return ""
-    sid = codecs.decode(sid_str,"hex")
-    str_sid_components = [sid[0]]
-    # Now decode the 48-byte portion
-    if len(sid) >= 8:
-        subauthority_count = sid[1]
-        identifier_authority = struct.unpack(">H", sid[2:4])[0]
-        identifier_authority <<= 32
-        identifier_authority |= struct.unpack(">L", sid[4:8])[0]
-        str_sid_components.append(identifier_authority)
-        start = 8
-        for i in range(subauthority_count):
-            authority = sid[start:start + 4]
-            if not authority:
-                break
-            if len(authority) < 4:
-                raise ValueError("In binary SID '%s', component %d has been truncated. "
-                         "Expected 4 bytes, found %d: (%s)",
-                         ",".join([str(ord(c)) for c in sid]), i,
-                         len(authority), authority)
-            str_sid_components.append(struct.unpack("<L", authority)[0])
-            start += 4
-            sid_str = "S-%s" % ("-".join([str(x) for x in str_sid_components]))
-    sid_name = template_lookups.get("Known SIDS",{}).get(sid_str,'unknown')
-    return "{} ({})".format(sid_str,sid_name)
-
-def blob_to_string(binblob):
-    """Takes in a binary blob hex characters and does its best to convert it to a readable string.
-       Works great for UTF-16 LE, UTF-16 BE, ASCII like data. Otherwise return it as hex.
+    自定義工具列
     """
-    try:
-        chrblob = codecs.decode(binblob,"hex")
-    except:
-        chrblob = binblob
-    try:
-        if re.match(b'^(?:[^\x00]\x00)+\x00\x00$', chrblob):
-            binblob = chrblob.decode("utf-16-le").strip("\x00")
-        elif re.match(b'^(?:\x00[^\x00])+\x00\x00$', chrblob):
-            binblob = chrblob.decode("utf-16-be").strip("\x00")
-        else:
-            binblob = chrblob.decode("latin1").strip("\x00")
-    except:
-        binblob = "" if not binblob else codecs.decode(binblob,"latin-1")
-    return binblob
+    def __init__(self, canvas, parent):
+        """initialize the parent class"""
+        NavigationToolbar2Tk.__init__(self, canvas, parent)
 
-def ole_timestamp(binblob):
-    """converts a hex encoded OLE time stamp to a time string"""
-    try:
-        td,ts = str(struct.unpack("<d",binblob)[0]).split(".")
-        dt = datetime(1899,12,30,0,0,0) + timedelta(days=int(td),seconds=86400 * float("0.{}".format(ts)))
-    except:
-        dt = "This field is incorrectly identified as an OLE timestamp in the template."
-    return dt
- 
-def file_timestamp(binblob):
-    """converts a hex encoded windows file time stamp to a time string"""
-    try:
-        dt = datetime(1601,1,1,0,0,0) + timedelta(microseconds=binblob/10)
-    except:
-        dt = "This field is incorrectly identified as a file timestamp in the template"
-    return dt
+    def pack(self, *args, **kwargs):
+        """pack pass"""
 
-def load_registry_sids(reg_file):
-    """Given Software hive find SID usernames"""
-    sids = {}
-    profile_key = r"Microsoft\Windows NT\CurrentVersion\ProfileList"
-    tgt_value = "ProfileImagePath"
-    try:
-        reg_handle = Registry.Registry(reg_file)
-        key_handle = reg_handle.open(profile_key)
-        for eachsid in key_handle.subkeys():
-            sids_path = eachsid.value(tgt_value).value()
-            sids[eachsid.name()] = sids_path.split("\\")[-1]
-    except:
-        return {}
-    return sids
+    def grid(self, *args, **kwargs):
+        """grid pass"""
 
-def load_interfaces(reg_file):
-    """Loads the names of the wireless networks from the software registry hive"""
-    try:
-        reg_handle = Registry.Registry(reg_file)
-    except Exception as e:
-        print(r"I could not open the specified SOFTWARE registry key. It is usually located in \Windows\system32\config.  This is an optional value.  If you cant find it just dont provide one.")
-        print(("WARNING : ", str(e)))
-        return {}
-    try:
-        int_keys = reg_handle.open('Microsoft\\WlanSvc\\Interfaces')
-    except Exception as e:
-        print("There doesn't appear to be any wireless interfaces in this registry file.")
-        print(("WARNING : ", str(e)))
-        return {}
-    profile_lookup = {}
-    for eachinterface in int_keys.subkeys():
-        if len(eachinterface.subkeys())==0:
-            continue
-        for eachprofile in eachinterface.subkey("Profiles").subkeys():
-            profileid = [x.value() for x in list(eachprofile.values()) if x.name()=="ProfileIndex"][0]
-            metadata = list(eachprofile.subkey("MetaData").values())
-            for eachvalue in metadata:
-                if eachvalue.name()=="Channel Hints":
-                    channelhintraw = eachvalue.value()
-                    hintlength = struct.unpack("I", channelhintraw[0:4])[0]
-                    name = channelhintraw[4:hintlength+4] 
-                    profile_lookup[str(profileid)] = name.decode(encoding="latin1")
-    return profile_lookup
 
-def load_srumid_lookups(database):
-    """loads the SRUMID numbers from the SRUM database"""
-    id_lookup = {}
-    #Note columns  0 = Type, 1 = Index, 2 = Value
-    lookup_table = database.get_table_by_name('SruDbIdMapTable')
-    column_lookup = dict([(x.name,index) for index,x in enumerate(lookup_table.columns)]) 
-    for rec_entry_num in range(lookup_table.number_of_records):
-        bin_blob = smart_retrieve(lookup_table,rec_entry_num, column_lookup['IdBlob'])
-        if smart_retrieve(lookup_table,rec_entry_num, column_lookup['IdType'])==3:
-            bin_blob = BinarySIDtoStringSID(bin_blob)
-        elif not bin_blob == "Empty":
-            bin_blob = blob_to_string(bin_blob)
-        id_lookup[smart_retrieve(lookup_table,rec_entry_num, column_lookup['IdIndex'])] = bin_blob
-    return id_lookup
+class Application(tk.Frame):
+    """
+    GUI介面先取得最新SRUM檔案再顯示按鈕
+    """
 
-def load_template_lookups(template_workbook):
-    """Load any tabs named lookup-xyz form the template file for lookups of columns with the same format type"""
-    template_lookups = {}
-    for each_sheet in template_workbook.get_sheet_names():
-        if each_sheet.lower().startswith("lookup-"):
-            lookupname = each_sheet.split("-")[1]
-            template_sheet = template_workbook.get_sheet_by_name(each_sheet)
-            lookup_table = {}
-            for eachrow in range(1,template_sheet.max_row+1):
-                value = template_sheet.cell(row = eachrow, column = 1).value
-                description = template_sheet.cell(row = eachrow, column = 2).value
-                lookup_table[value] = description
-            template_lookups[lookupname] = lookup_table
-    return template_lookups
+    def __init__(self, master=None):
+        super().__init__(master)
+        self.master = master
+        self.pack()
+        self.start_date = None
+        self.end_date = None
+        self.create_widgets()
+
+    def create_widgets(self):
+        """
+            創建視窗元件
+        """
+        # 取得最新的 SRUM 檔案按鈕
+        self.get_srum_button = ttk.Button(
+            self, text="取得最新的 SRUM 檔案", command=self.get_srum_file)
+        self.get_srum_button.grid(row=0, column=0)
+
+        # 查詢電量狀態按鈕
+        self.query_energy_button = ttk.Button(
+            self, text="查詢電量狀態", command=self.query_energy_usage, state=tk.DISABLED)
+        self.query_energy_button.grid(row=0, column=1)
+
+        # 查詢 CPU 使用率按鈕
+        self.query_cpu_button = ttk.Button(
+            self, text="查詢CPU使用率", command=self.query_cpu_usage, state=tk.DISABLED)
+        self.query_cpu_button.grid(row=0, column=2)
+
+        # 查詢網路流量按鈕
+        self.query_network_button = ttk.Button(
+            self, text="查詢網路流量", command=self.query_network_usage, state=tk.DISABLED)
+        self.query_network_button.grid(row=0, column=3)
+
+        # 偵測異常紀錄按鈕
+        # self.detect_anomaly_button = ttk.Button(
+        #     self, text="偵測異常紀錄", command=self.detect_anomaly)
+        # self.detect_anomaly_button.grid(row=0, column=4)
+
+
+        # 開始日期 Label 和 Calendar
+        self.start_date_label = ttk.Label(self, text="開始日期：")
+        self.start_date_label.grid(row=1, column=0)
+        self.start_cal = DateEntry(self)
+        self.start_cal.grid(row=1, column=1)
+
+        # 結束日期 Label 和 Calendar
+        self.end_date_label = ttk.Label(self, text="結束日期：")
+        self.end_date_label.grid(row=2, column=0)
+        self.end_cal = DateEntry(self)
+        self.end_cal.grid(row=2, column=1)
+
+        # 確定按鈕
+        self.confirm_button = ttk.Button(
+            self, text="確定", command=self.confirm_dates)
+        self.confirm_button.grid(row=3, column=0, columnspan=2)
+
+        # 圖表顯示區域
+        # self.fig, self.ax = plt.subplots()
+        # self.canvas = FigureCanvasTkAgg(self.fig, self)
+        # self.canvas.get_tk_widget().grid(row=4, column=0, columnspan=5)
+
+        # self.toolbar = CustomToolbar(self.canvas, self)
+        # self.toolbar.grid(row=5, column=0, columnspan=5)
+
+    def confirm_dates(self):
+        """note"""
+        self.start_date = self.start_cal.get_date()
+        self.end_date = self.end_cal.get_date()
+        print("開始日期:", self.start_date)
+        print("結束日期:", self.end_date)
+
+
+    def get_srum_file(self):
+        """note"""
+        print("取得最新的 SRUM 檔案")
+        # 在此添加取得最新的 SRUM 檔案的程式碼
+
+        # 執行 srum_dump2.exe
+        subprocess.Popen('python srum_dump2.py')
+
+        # 執行顯示按鈕
+        self.query_energy_button.config(state=tk.NORMAL)
+        self.query_cpu_button.config(state=tk.NORMAL)
+        self.query_network_button.config(state=tk.NORMAL)
+        # self.detect_anomaly_button.config(state=tk.NORMAL)
+
+    def query_energy_usage(self):
+        """
+            查詢電量狀態
+        """
+        print("查詢電量狀態")
+        # 在此添加查詢電量狀態的程式碼
+        
+        try:
+                
+            # 讀取SRUM_DUMP_OUTPUT.xlsx檔案
+            df = pd.read_excel(f'SRUM_DUMP_OUTPUT_{formatted_today}.xlsx', sheet_name='Energy Usage')
+
+            # 取出需要的欄位
+            df = df[['Event Time Stamp', 'DesignedCapacity',
+                    'FullChargedCapacity', 'Battery Level']]
+
+            # 將 '日期' 列轉換為 datetime
+            df['Event Time Stamp'] = pd.to_datetime(df['Event Time Stamp'])
+
+            # 將開始和結束日期轉換為 datetime
+            start_date = pd.to_datetime(self.start_date)
+            end_date = pd.to_datetime(self.end_date)
+
+            # 使用布林索引來篩選 DataFrame
+            df = df[(df['Event Time Stamp'] >= start_date) & (df['Event Time Stamp'] <= end_date)]
+
+            # 設定X軸、Y軸數據
+            x_data = df['Event Time Stamp']
+            y_data = df[['DesignedCapacity',
+                        'FullChargedCapacity', 'Battery Level']]
+
+            # 繪圖
+            plt.plot(x_data, y_data)
+            plt.legend(['DesignedCapacity', 'FullChargedCapacity', 'Battery Level'])
+            plt.xlabel('Event Time Stamp')
+            plt.xticks(rotation=45)
+            plt.ylabel('Capacity / Battery Level')
+
+            # 添加邊距
+            plt.tight_layout()
+
+            # 顯示圖表
+            plt.show()
+
+        except Exception as err:
+            messagebox.showerror("錯誤", f"發生錯誤: {err}")
+
+    def query_cpu_usage(self):
+        """
+           查詢CPU使用率
+        """
+        print("查詢CPU使用率")
+        # 在此添加查詢CPU使用率的程式碼
+        
+        try:
+            # 設定檔案路徑
+            file_path = f"SRUM_DUMP_OUTPUT_{formatted_today}.xlsx"
+
+            # 讀取Excel檔案中名為 "Application Resource Usage" 的資料表
+            df = pd.read_excel(
+                file_path, sheet_name="Application Resource Usage")
+
+            # 將 '日期' 列轉換為 datetime
+            df['Srum Entry Creation'] = pd.to_datetime(df['Srum Entry Creation'])
+
+            # 將開始和結束日期轉換為 datetime
+            start_date = pd.to_datetime(self.start_date)
+            end_date = pd.to_datetime(self.end_date)
+
+            # 使用布林索引來篩選 DataFrame
+            df = df[(df['Srum Entry Creation'] >= start_date) & (df['Srum Entry Creation'] <= end_date)]
+
+            # 將 "CPU time in Forground" 和 "CPU time in background" 欄位的值除以 230000000
+            df["CPU time in Forground"] /= 230000000
+            df["CPU time in background"] /= 230000000
+
+            # 繪製圖表
+            fig, ax = plt.subplots()
+            foreground_line, = ax.plot(
+                df["Srum Entry Creation"], df["CPU time in Forground"], label="CPU time in Forground")
+            background_line, = ax.plot(
+                df["Srum Entry Creation"], df["CPU time in background"], label="CPU time in background")
+            ax.set_xlabel("Srum Entry Creation")
+            ax.set_ylabel("CPU time (normalized)")
+            ax.legend()
+
+            # 使用 mplcursors 套件顯示數據標籤
+            cursor1 = mplcursors.cursor(foreground_line, hover=True)
+            cursor1.connect("add", lambda sel: sel.annotation.set_text(
+                f"Foreground: {sel.target[1]:.2f}"))
+            cursor2 = mplcursors.cursor(background_line, hover=True)
+            cursor2.connect("add", lambda sel: sel.annotation.set_text(
+                f"Background: {sel.target[1]:.2f}"))
+
+            # 調整 X 軸標籤角度
+            plt.xticks(rotation=45, ha='right')
+
+            # 添加邊距
+            plt.tight_layout()
+
+            # 顯示圖表
+            plt.show()
+
+        except Exception as err:
+            messagebox.showerror("錯誤", f"發生錯誤: {err}")
+
+    def query_network_usage(self):
+        """
+            查詢網路流量
+        """
+        print("查詢網路流量")
+        # 在此添加查詢網路流量的程式碼
+        try:
+            # 讀取 Excel 檔案
+            df = pd.read_excel(f'SRUM_DUMP_OUTPUT_{formatted_today}.xlsx',
+                            sheet_name='Network Data Usage')
+
+            # 將 User SID 映射為對應的名稱
+            df['User SID'] = df['User SID'].apply(map_user_sid)
+
+            # 選擇需要的欄位
+            df = df[['SRUM ENTRY CREATION', 'Application', 'User SID',
+                    'Interface', 'Bytes Sent', 'Bytes Received']]
+
+
+            # 將 '日期' 列轉換為 datetime
+            df['SRUM ENTRY CREATION'] = pd.to_datetime(df['SRUM ENTRY CREATION'])
+
+            # 將開始和結束日期轉換為 datetime
+            start_date = pd.to_datetime(self.start_date)
+            end_date = pd.to_datetime(self.end_date)
+
+            # 使用布林索引來篩選 DataFrame
+            df = df[(df['SRUM ENTRY CREATION'] >= start_date) & (df['SRUM ENTRY CREATION'] <= end_date)]
+
+            # 建立 GUI
+            root = tk.Tk()
+            root.title('Network Data Usage')
+
+            # 建立表格
+            table = ttk.Treeview(root)
+
+            # 設定捲軸
+            vsb = ttk.Scrollbar(root, orient="vertical", command=table.yview)
+            vsb.pack(side='right', fill='y')
+            table.configure(yscrollcommand=vsb.set)
+
+            # 建立表格欄位
+            table['columns'] = list(df.columns)
+
+            # 設定欄位顯示名稱
+            table.column('#0', width=0, stretch=tk.NO)
+            for i, col in enumerate(df.columns):
+                table.column(col, width=100, minwidth=50, anchor=tk.CENTER)
+                table.heading(col, text=col, command=lambda _col=col: sort_column(table, _col, False))
+
+            # 將資料填入表格中
+            for index, row in df.iterrows():
+                table.insert(parent='', index='end', iid=index,
+                            text='', values=list(row))
+
+            # 調整表格大小
+            table.pack(fill='both', expand=True)
+
+            # 執行 GUI
+            root.mainloop()
+
+        except Exception as err:
+            messagebox.showerror("錯誤", f"發生錯誤: {err}")
+
+    def detect_anomaly(self):
+        """
+            偵測異常紀錄
+        """
+        print("偵測異常紀錄")
+        # 在此添加偵測異常紀錄的程式碼
+
+        try:
+            # 讀取 Excel 檔案
+            df = pd.read_excel(f'SRUM_DUMP_OUTPUT_{formatted_today}.xlsx', sheet_name="Application Resource Usage")
+
+            # 篩選符合條件的資料
+            filtered_df = df[df["CPU time in Forground"]/2300000000 > 1]
+            filtered_df = filtered_df[[
+                "Srum Entry Creation", "Application", "User SID", "CPU time in Forground"]]
+            filtered_df = filtered_df.reset_index(drop=True)
+            filtered_df["User SID"] = filtered_df["User SID"].apply(map_user_sid)
+
+            # 創建新視窗，顯示篩選後的資料
+            if len(filtered_df) == 0:
+                # result_label.config(text="No data found")
+                print("Error: Could not read file")
+            else:
+                # root = tk.Tk()
+                new_window = tk.Tk()
+                new_window.title("Filtered Data")
+
+                # 創建 Treeview 元件
+                tree = ttk.Treeview(new_window, selectmode='browse')
+                tree.pack(fill='both', expand=True)
+
+                # 設定欄位
+                tree["columns"] = ["Srum Entry Creation",
+                                "Application", "User SID", "CPU time in Forground"]
+                tree.column("#0", width=0, stretch=tk.NO)
+                tree.column("Srum Entry Creation", width=150,
+                            minwidth=50, anchor=tk.CENTER)
+                tree.column("Application", width=150,
+                            minwidth=50, anchor=tk.CENTER)
+                tree.column("User SID", width=150, minwidth=50, anchor=tk.CENTER)
+                tree.column("CPU time in Forground", width=150,
+                            minwidth=50, anchor=tk.CENTER)
+
+                # 設定欄位標題
+                tree.heading("Srum Entry Creation",
+                            text="Srum Entry Creation", anchor=tk.CENTER)
+                tree.heading("Application", text="Application", anchor=tk.CENTER)
+                tree.heading("User SID", text="User SID", anchor=tk.CENTER)
+                tree.heading("CPU time in Forground/2300000000",
+                            text="CPU time in Forground(S)", anchor=tk.CENTER)
+
+                # 加入資料
+                for i, row in filtered_df.iterrows():
+                    tree.insert("", i, values=tuple(row))
+
+            root.mainloop()
+
+        except Exception as err:
+            messagebox.showerror("錯誤", f"發生錯誤: {err}")
+
+    # def plot_data(self, data, xlabel, ylabel, title):
+    #     """note"""
+    #     self.ax.clear()
+    #     self.ax.plot(data)
+    #     self.ax.set_xlabel(xlabel)
+    #     self.ax.set_ylabel(ylabel)
+    #     self.ax.set_title(title)
+    #     self.canvas.draw()
+
+    #     mplcursors.cursor(self.ax, hover=True)
+
+# def sid_to_user(sid):
+#     """
+#         處理 User SID 的顯示
+#     """
+#     if sid == 'S-1-5-21-2506843646-2876841158-3598199272-1001( unknown)':
+#         return "user"
+#     elif sid == "S-1-5-18 ( Local System)":
+#         return "Local System"
+#     elif sid == "S-1-5-19 ( NT Authority)":
+#         return "NT Authority"
+#     elif sid == "S-1-5-19 ( NT Authority)":
+#         return "NT Authority"
+#     else:
+#         return sid
+
+def sort_column(tree, col, reverse):
+    """
+    排序表格欄位
+    """
+    data_list = [(tree.set(child, col), child) for child in tree.get_children('')]
     
-def load_template_tables(template_workbook):
-    """Load template tabs that define the field names and formats for tables found in SRUM"""
-    template_tables = {}    
-    sheets = template_workbook.get_sheet_names()
-    for each_sheet in sheets:
-        #open the first sheet in the template
-        template_sheet = template_workbook.get_sheet_by_name(each_sheet)
-        #retieve the name of the ESE table to populate the sheet with from A1
-        ese_template_table = template_sheet.cell(row=1,column=1).value
-        #retrieve the names of the ESE table columns and cell styles from row 2 and format commands from row 3 
-        template_field = {}
-        #Read the first Row B & C in the template into lists so we know what data we are to extract
-        for eachcolumn in range(1,template_sheet.max_column+1):
-            field_name = template_sheet.cell(row = 2, column = eachcolumn).value
-            if field_name == None:
-                break
-            template_style = template_sheet.cell(row = 4, column = eachcolumn).style
-            template_format = template_sheet.cell(row = 3, column = eachcolumn).value
-            template_value = template_sheet.cell(row = 4, column = eachcolumn ).value
-            if not template_value:
-                template_value= field_name
-            template_field[field_name] = (template_style,template_format,template_value)
-        template_tables[ese_template_table] = (each_sheet, template_field)
-    return template_tables    
+    # 檢查是否為數字
+    is_number = all([num_str.replace(".", "", 1).isdigit() for num_str, _ in data_list])
 
-
-def smart_retrieve(ese_table, ese_record_num, column_number):
-    """Given a row and column will determine the format and retrieve a value from the ESE table"""
-    rec = ese_table.get_record(ese_record_num)
-    col_type = rec.get_column_type(column_number)
-    col_data = rec.get_value_data(column_number)
-    #print "rec:%s  col:%s type:%s %s" % (ese_record_num, column_number, col_type, ese_column_types[col_type])
-    if col_type == pyesedb.column_types.BINARY_DATA:
-        col_data = "" if not col_data else codecs.encode(col_data,"HEX")
-    elif col_type == pyesedb.column_types.BOOLEAN:
-        col_data = struct.unpack('?',col_data)[0]
-    elif col_type == pyesedb.column_types.CURRENCY:
-        pass
-    elif col_type == pyesedb.column_types.DATE_TIME:
-        col_data = ole_timestamp(col_data)
-    elif col_type == pyesedb.column_types.DOUBLE_64BIT:
-        col_data = 0 if not col_data else struct.unpack('d',col_data)[0]
-    elif col_type == pyesedb.column_types.FLOAT_32BIT:
-        col_data = 0.0 if not col_data else struct.unpack('f',col_data)[0]
-    elif col_type == pyesedb.column_types.GUID:
-        col_data = 0 if not col_data else str(uuid.UUID(bytes = col_data))
-    elif col_type == pyesedb.column_types.INTEGER_16BIT_SIGNED:
-        col_data = 0 if not col_data else struct.unpack('h',col_data)[0]
-    elif col_type == pyesedb.column_types.INTEGER_16BIT_UNSIGNED:
-        col_data = 0 if not col_data else struct.unpack('H',col_data)[0]
-    elif col_type == pyesedb.column_types.INTEGER_32BIT_SIGNED:
-        col_data =  0 if not col_data else struct.unpack('i',col_data)[0]
-    elif col_type == pyesedb.column_types.INTEGER_32BIT_UNSIGNED:
-        col_data = 0 if not col_data else struct.unpack('I',col_data)[0]
-    elif col_type == pyesedb.column_types.INTEGER_64BIT_SIGNED:
-        col_data = 0 if not col_data else struct.unpack('q',col_data)[0]
-    elif col_type == pyesedb.column_types.INTEGER_8BIT_UNSIGNED:
-        col_data = 0 if not col_data else struct.unpack('B',col_data)[0]
-    elif col_type == pyesedb.column_types.LARGE_BINARY_DATA:
-        col_data = "" if not col_data else codecs.encode(col_data,"HEX")
-    elif col_type == pyesedb.column_types.LARGE_TEXT:
-        col_data = blob_to_string(col_data)
-    elif col_type == pyesedb.column_types.NULL:
-        pass
-    elif col_type == pyesedb.column_types.SUPER_LARGE_VALUE:
-        col_data = "" if not col_data else codecs.encode(col_data,"HEX")
-    elif col_type == pyesedb.column_types.TEXT:
-        col_data = blob_to_string(col_data)  
+    if is_number:
+        data_list.sort(key=lambda t: float(t[0]), reverse=reverse)
     else:
-        col_data = blob_to_string(col_data)    
-    if col_data==None:
-        col_data = "Empty"
-    return col_data
+        data_list.sort(key=lambda t: t[0], reverse=reverse)
 
-def format_output(val, eachformat, eachstyle, xls_sheet):
-    """Returns a excel cell with the data formated as specified in the template table"""
-    new_cell = WriteOnlyCell(xls_sheet, value = "init")
-    new_cell.style = eachstyle
-    if val==None:
-        val="None"
-    elif eachformat in [None, "OLE"]:
-        pass
-    elif eachformat.startswith("OLE:"):
-        val = val.strftime(eachformat[4:])
-    elif eachformat=="FILE":
-        val = file_timestamp(val)
-        new_cell.number_format = 'YYYY MMM DD'
-    elif eachformat.startswith("FILE:"):
-        val = file_timestamp(val)
-        val = val.strftime(eachformat[5:])
-    elif eachformat.lower().startswith("lookup-"):
-        lookup_name = eachformat.split("-")[1]
-        if lookup_name in template_lookups:
-            lookup_table = template_lookups.get(lookup_name,{})
-            val = lookup_table.get(val,val)
-    elif eachformat.lower() == "lookup_id":
-        val = id_table.get(val, "No match in srum lookup table for %s" % (val))
-    elif eachformat.lower() == "lookup_luid":
-        inttype = struct.unpack(">H6B", codecs.decode(format(val,'016x'),'hex'))[0]
-        val = template_lookups.get("LUID Interfaces",{}).get(inttype,"")
-    elif eachformat.lower() == "seconds":
-        val = val/86400.0
-        new_cell.number_format = 'dd hh:mm:ss'
-    elif eachformat.lower() == "md5":
-        val = hashlib.md5(str(val)).hexdigest()
-    elif eachformat.lower() == "sha1":
-        val = hashlib.sha1(str(val)).hexdigest()
-    elif eachformat.lower() == "sha256":
-        val = hashlib.sha256(str(val)).hexdigest()
-    elif eachformat.lower() == "base16":
-        if type(val)==int:
-            val = hex(val)
-        else:
-            val = format(val,"08x")
-    elif eachformat.lower() == "base2":
-        if type(val)==int:
-            val = format(val,"032b")
-        else:
-            try:
-                val = int(str(val),2)
-            except :
-                val = val
-    elif eachformat.lower() == "interface_id" and options.reghive:
-        val = interface_table.get(str(val),"")
-    elif eachformat.lower() == "interface_id" and not options.reghive:
-        val = val
+    for index, (_, child) in enumerate(data_list):
+        tree.move(child, '', index)
+
+    tree.heading(col, command=lambda: sort_column(tree, col, not reverse))
+
+def map_user_sid(sid):
+    """
+    將 User SID 映射為對應的名稱
+    """
+    if sid == 'S-1-5-18 ( Local System)':
+        return 'Local System'
+    elif sid == 'S-1-5-21-2506843646-2876841158-3598199272-1001( unknown)':
+        return 'user'
+    elif sid == 'S-1-5-19 ( NT Authority)':
+        return 'NT Authority'
+    elif sid == 'S-1-5-20 ( NT Authority)':
+        return 'NT Authority'
     else:
-        val = val
-    try:
-        new_cell.value = val
-    except:
-        new_cell.value = re.sub(r'[\000-\010]|[\013-\014]|[\016-\037]|[\x00-\x1f\x7f-\x9f]|[\uffff]',"",val)
-    return new_cell
+        return sid
 
-
-def process_srum(ese_db, target_wb ):
-    """Process all the tables and columns in the ESE database"""
-    total_recs = sum([x.number_of_records for x in ese_db.tables if x.name not in skip_tables])
-    if not options.quiet:
-        print("Processing {} records across {} tables".format(total_recs,ese_db.number_of_tables-len(skip_tables)))
-    for table_num in range(ese_db.number_of_tables):
-        ese_table = ese_db.get_table(table_num)
-        if ese_table.name in skip_tables:
-            continue
-        if ese_table.name in template_tables:
-            tname,tfields = template_tables.get(ese_table.name)
-        else:
-            tname = ese_table.name[1:15]
-
-        if not options.quiet:
-            print("\nNow dumping table {} containing {} rows".format(tname, ese_table.number_of_records))
-        xls_sheet = target_wb.create_sheet(title=tname)
-
-        header_row = [x.name for x in ese_table.columns]
-        if ese_table.name in template_tables:
-            tname,tfields = template_tables.get(ese_table.name)
-            header_row = []
-            for eachcol in ese_table.columns:
-                if eachcol.name in tfields:
-                    cell_style, _, cell_value = tfields.get(eachcol.name)
-                    new_cell = WriteOnlyCell(xls_sheet, value=cell_value)
-                    new_cell.style = cell_style
-                    header_row.append( new_cell )
-                else:
-                    header_row.append(WriteOnlyCell(xls_sheet, value=eachcol.name))
-        xls_sheet.append(header_row)
-    
-        column_names = [x.name for x in ese_table.columns]
-        for row_num in range(ese_table.number_of_records):
-            try:
-                ese_row = ese_table.get_record(row_num)
-            except Exception as e:
-                print("Skipping corrupt row {0} in the {1} table. Because {2}".format(row_num, ese_table.name, str(e)))
-                continue
-            if ese_row == None:
-                continue
-
-            if not options.quiet and row_num % 500 == 0:
-                 print("\r|{0:-<50}| {1:3.2f}%".format("X"*( 50 * row_num//ese_table.number_of_records), 100*row_num/ese_table.number_of_records ),end="")
-
-                #The row is retrieved now use the template to figure out which ones you want and format them
-            xls_row = []
-            for col_num in range(ese_table.number_of_columns):
-                val = smart_retrieve(ese_table,row_num, col_num)
-                if val=="Error":
-                    val = "WARNING: Invalid Column Name {}".format(column_names[col_num])
-                elif val==None:
-                    val="None"  
-                elif ese_table.name in template_tables:
-                    tname,tfields = template_tables.get(ese_table.name) 
-                    if column_names[col_num] in tfields:
-                        cstyle, cformat, _ = tfields.get(column_names[col_num])
-                        val = format_output(val, cformat, cstyle,xls_sheet)              
-                #print dir(new_cell.style.font)
-                xls_row.append(val)
-            xls_sheet.append(xls_row)
-        if not options.quiet:
-            print("\r|XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX| 100.00% FINISHED")
-
-def show_live_system_warning():
-    """Warn the user when they try to analyze the srum on their own live system."""
-    layout = [
-          [sg.Text("It appears your trying to open SRUDB.DAT from a live system.")],
-          [sg.Text("Copying or reading that file while it is locked is unlikely to succeed.")],
-          [sg.Text("First, use a tool such as FGET that can copy files that are in use.")], 
-          [sg.Text(r"Try: 'fget -extract c:\windows\system32\sru\srudb.dat <a destination path>'")],
-          [sg.Button("Close"), sg.Button("Download FGET") ]
-         ]
-    if ctypes.windll.shell32.IsUserAnAdmin() == 1:
-        layout[-1].append(sg.Button("Auto Extract"))
-    pop_window = sg.Window("WARNING", layout, no_titlebar=True, keep_on_top=True, border_depth=5)
-    return_value = None
-    while True:
-        event,_  = pop_window.Read()
-        if event in (None,"Close"):
-            break
-        if event == "Download FGET":
-            webbrowser.open("https://github.com/MarkBaggett/srum-dump/blob/master/FGET.exe")
-        if event == "Auto Extract":
-            return_value = extract_live_file()
-            break
-    pop_window.Close()
-    return return_value
-
-def extract_live_file():
-    try:
-        tmp_dir = tempfile.mkdtemp()
-        #fget_file = tempfile.NamedTemporaryFile(mode="w+b", suffix=".exe",delete=False)
-        fget_file = pathlib.Path(tmp_dir) / "fget.exe"
-        #registry_file = tempfile.NamedTemporaryFile(mode="w+b", suffix = ".reg", delete=False)
-        registry_file = pathlib.Path(tmp_dir) / "SOFTWARE"
-        #extracted_srum = tempfile.NamedTemporaryFile(mode="w+b", suffix = ".dat", delete=False
-        extracted_srum = pathlib.Path(tmp_dir) / "srudb.dat"
-        esentutl_path = pathlib.Path(os.environ.get("COMSPEC")).parent / "esentutl.exe"
-        if esentutl_path.exists():
-            print("Extracting srum with esentutl.exe")
-            cmdline = r"{} /y c:\\windows\\system32\\sru\\srudb.dat /vss /d {}".format(str(esentutl_path), str(extracted_srum))
-            print(cmdline)
-            phandle = subprocess.Popen(cmdline, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out1,_ = phandle.communicate()
-            print("Extracting Registry with esentutl.exe")
-            cmdline = r"{} /y c:\\windows\\system32\\config\\SOFTWARE /vss /d {}".format(str(esentutl_path), str(registry_file))
-            print(cmdline)
-            phandle = subprocess.Popen(cmdline, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out2,_ = phandle.communicate()
-        else:
-            print("Downloading fget.exe to {}".format(str(fget_file)))
-            fget_binary = urllib.request.urlopen('https://github.com/MarkBaggett/srum-dump/raw/master/FGET.exe').read()
-            fget_file.write_bytes(fget_binary)
-            print("Extracting srum with fget.exe")
-            cmdline = r"{} -extract c:\\windows\\system32\\sru\srudb.dat {}".format(str(fget_file), str(extracted_srum))
-            print(cmdline)
-            phandle = subprocess.Popen(cmdline, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out1,_ = phandle.communicate()
-            cmdline = r"{} -extract c:\\windows\\system32\\config\SOFTWARE {}".format(str(fget_file), str(registry_file))
-            print(cmdline)
-            phandle = subprocess.Popen(cmdline, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out2,_ = phandle.communicate()
-            fget_file.unlink()
-    except Exception as e:
-        print("Unable to automatically extract srum. {}\n{}\n{}".format(str(e), out1.decode(), out2.decode()))
-        return None
-    if (b"returned error" in out1+out2) or (b"Init failed" in out1+out2):
-        print("ERROR\n SRUM Extraction: {}\n Registry Extraction {}".format(out1.decode(),out2.decode()))
-    elif b"success" in out1.lower() and b"success" in out2.lower():
-        return str(extracted_srum), str(registry_file)
-    else:
-        print("Unable to determine success or failure.", out1.decode(),"\n",out2.decode())
-    return None
- 
-parser = argparse.ArgumentParser(description="Given an SRUM database it will create an XLS spreadsheet with analysis of the data in the database.")
-parser.add_argument("--SRUM_INFILE","-i", help ="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
-parser.add_argument("--XLSX_OUTFILE", "-o", default="SRUM_DUMP_OUTPUT.xlsx", help="Full path to the XLS file that will be created.")
-parser.add_argument("--XLSX_TEMPLATE" ,"-t", help = "The Excel Template that specifies what data to extract from the srum database. You can create template_tables with ese_template.py.")
-parser.add_argument("--REG_HIVE", "-r", dest="reghive", help = "If a registry hive is provided then the names of the network profiles will be resolved.")
-parser.add_argument("--quiet", "-q", help = "Supress unneeded output messages.",action="store_true")
-options = parser.parse_args()
-
-options.SRUM_INFILE = str("c:\\windows\\system32\\sru\\srudb.dat")
-options.XLSX_OUTFILE = str("./SRUM_DUMP_OUTPUT.xlsx")
-options.XLSX_TEMPLATE = str("./SRUM_TEMPLATE2.xlsx")
-options.reghive = str("")
-if options.reghive == ".":
-    options.reghive = ""
-            
-
-
-regsids = {}
-if options.reghive:
-    interface_table = load_interfaces(options.reghive)
-    regsids = load_registry_sids(options.reghive)
-
-try:
-    warnings.simplefilter("ignore")
-    ese_db = pyesedb.file()
-    ese_db.open(options.SRUM_INFILE)
-    #ese_db = ese.ESENT_DB(options.SRUM_INFILE)
-except Exception as e:
-    print("I could not open the specified SRUM file. Check your path and file name.")
-    print("Error : ", str(e))
-    sys.exit(1) 
-
-try:
-    template_wb = openpyxl.load_workbook(filename=options.XLSX_TEMPLATE)
-except Exception as e:
-    print("I could not open the specified template file %s. Check your path and file name." % (options.XLSX_TEMPLATE))
-    print("Error : ", str(e))
-    sys.exit(1)
-
-# skip_tables = ['MSysObjects', 'MSysObjectsShadow', 'MSysObjids', 'MSysLocales','SruDbIdMapTable']
-skip_tables = ['MSysObjects', 'MSysObjectsShadow', 'MSysObjids', 'MSysLocales']
-# skip_tables = []
-
-template_tables = load_template_tables(template_wb)
-template_lookups = load_template_lookups(template_wb)
-if regsids:
-    template_lookups.get("Known SIDS",{}).update(regsids)
-    #print("REGSIDS!!!")
-    #print(template_lookups.get("Known SIDS"))
-id_table = load_srumid_lookups(ese_db)
-
-target_wb = openpyxl.Workbook()
-process_srum(ese_db, target_wb)
-
-firstsheet=target_wb.get_sheet_by_name("Sheet")
-target_wb.remove_sheet(firstsheet)
-print("Writing output file to disk.")
-try:
-    target_wb.save(options.XLSX_OUTFILE)
-except Exception as e:
-    print("I was unable to write the output file.  Do you have an old version open?  If not this is probably a path or permissions issue.")
-    print("Error : ", str(e))
-
-print("Done.")
+# 執行程式
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.geometry("600x100")
+    root.title("系統資源監控")
+    app = Application(master=root)
+    app.mainloop()

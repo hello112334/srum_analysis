@@ -1,4 +1,9 @@
-安裝需要的函式庫
+# 1
+
+## srum dump
+https://github.com/MarkBaggett/srum-dump
+
+### 安裝需要的函式庫
 pip install -r requirements.txt
 "# srum_analysis" 
 

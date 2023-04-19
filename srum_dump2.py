@@ -22,6 +22,15 @@ import urllib.request
 import subprocess
 import ctypes
 
+# srum folder
+srum_filpath = 'C:\\Windows\\System32\\sru\\'
+
+# 獲取當前日期
+today = datetime.now()
+
+# 將日期格式化為 "yyyymmdd"
+formatted_today = today.strftime("%Y%m%d")
+
 
 def BinarySIDtoStringSID(sid_str):
     # Original form Source: https://github.com/google/grr/blob/master/grr/parsers/wmi_parser.py
@@ -448,9 +457,12 @@ def extract_live_file():
         #registry_file = tempfile.NamedTemporaryFile(mode="w+b", suffix = ".reg", delete=False)
         registry_file = pathlib.Path(tmp_dir) / "SOFTWARE"
         # extracted_srum = tempfile.NamedTemporaryFile(mode="w+b", suffix = ".dat", delete=False
-        extracted_srum = pathlib.Path(tmp_dir) / "srudb.dat"
+        # extracted_srum = pathlib.Path(tmp_dir) / "srudb.dat"
+        extracted_srum = srum_filpath + "srudb.dat"
+
         esentutl_path = pathlib.Path(
             os.environ.get("COMSPEC")).parent / "esentutl.exe"
+
         if esentutl_path.exists():
             print("Extracting srum with esentutl.exe")
             cmdline = r"{} /y c:\\windows\\system32\\sru\\srudb.dat /vss /d {}".format(
@@ -486,8 +498,8 @@ def extract_live_file():
             out2, _ = phandle.communicate()
             fget_file.unlink()
     except Exception as e:
-        print("Unable to automatically extract srum. {}\n{}\n{}".format(
-            str(e), out1.decode(), out2.decode()))
+        # print("Unable to automatically extract srum. {}\n{}\n{}".format(
+        #     str(e), out1.decode(), out2.decode()))
         return None
     if (b"returned error" in out1+out2) or (b"Init failed" in out1+out2):
         print("ERROR\n SRUM Extraction: {}\n Registry Extraction {}".format(
@@ -504,7 +516,7 @@ parser = argparse.ArgumentParser(
     description="Given an SRUM database it will create an XLS spreadsheet with analysis of the data in the database.")
 parser.add_argument("--SRUM_INFILE", "-i",
                     help="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
-parser.add_argument("--XLSX_OUTFILE", "-o", default="SRUM_DUMP_OUTPUT.xlsx",
+parser.add_argument("--XLSX_OUTFILE", "-o", default=f"SRUM_DUMP_OUTPUT_{formatted_today}.xlsx",
                     help="Full path to the XLS file that will be created.")
 parser.add_argument("--XLSX_TEMPLATE", "-t",
                     help="The Excel Template that specifies what data to extract from the srum database. You can create template_tables with ese_template.py.")
@@ -525,8 +537,8 @@ ads = itertools.cycle(["Did you know SANS Automating Infosec with Python SEC573 
 
 if not options.SRUM_INFILE:
     srum_path = ""
-    if os.path.exists("SRUDB.DAT"):
-        srum_path = os.path.join(os.getcwd(), "SRUDB.DAT")
+    if os.path.exists(srum_filpath + "SRUDB.DAT"):
+        srum_path = os.path.join(os.getcwd(), srum_filpath + "SRUDB.DAT")
     temp_path = pathlib.Path.cwd() / "SRUM_TEMPLATE2.XLSX"
     if temp_path.exists():
         temp_path = str(temp_path)
@@ -593,7 +605,7 @@ if not options.SRUM_INFILE:
     window.Close()
     options.SRUM_INFILE = str(pathlib.Path(values.get("_SRUMPATH_")))
     options.XLSX_OUTFILE = str(pathlib.Path(
-        values.get("_OUTDIR_")) / "SRUM_DUMP_OUTPUT.xlsx")
+        values.get("_OUTDIR_")) / f"SRUM_DUMP_OUTPUT_{formatted_today}.xlsx")
     options.XLSX_TEMPLATE = str(pathlib.Path(values.get("_TEMPATH_")))
     options.reghive = str(pathlib.Path(values.get("_REGPATH_")))
     if options.reghive == ".":
@@ -602,7 +614,7 @@ else:
     if not options.XLSX_TEMPLATE:
         options.XLSX_TEMPLATE = "SRUM_TEMPLATE2.xlsx"
     if not options.XLSX_OUTFILE:
-        options.XLSX_OUTFILE = "SRUM_DUMP_OUTPUT.xlsx"
+        options.XLSX_OUTFILE = f"SRUM_DUMP_OUTPUT_{formatted_today}.xlsx"
     if not os.path.exists(options.SRUM_INFILE):
         print("ESE File Not found: "+options.SRUM_INFILE)
         sys.exit(1)

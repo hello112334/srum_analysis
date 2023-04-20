@@ -21,6 +21,7 @@ import tempfile
 import urllib.request
 import subprocess
 import ctypes
+import configparser
 
 # srum folder
 srum_filpath = 'C:\\Windows\\System32\\sru\\'
@@ -512,162 +513,175 @@ def extract_live_file():
     return None
 
 
-parser = argparse.ArgumentParser(
-    description="Given an SRUM database it will create an XLS spreadsheet with analysis of the data in the database.")
-parser.add_argument("--SRUM_INFILE", "-i",
-                    help="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
-parser.add_argument("--XLSX_OUTFILE", "-o", default=f"SRUM_DUMP_OUTPUT_{formatted_today}.xlsx",
-                    help="Full path to the XLS file that will be created.")
-parser.add_argument("--XLSX_TEMPLATE", "-t",
-                    help="The Excel Template that specifies what data to extract from the srum database. You can create template_tables with ese_template.py.")
-parser.add_argument("--REG_HIVE", "-r", dest="reghive",
-                    help="If a registry hive is provided then the names of the network profiles will be resolved.")
-parser.add_argument(
-    "--quiet", "-q", help="Supress unneeded output messages.", action="store_true")
-options = parser.parse_args()
+if __name__ == "__main__":
 
-ads = itertools.cycle(["Did you know SANS Automating Infosec with Python SEC573 teaches you to develop Forensics and Incident Response tools?",
-                       "To learn how SRUM and other artifacts can enhance your forensics investigations check out SANS Windows Forensic Analysis FOR500.",
-                       "Yogesh Khatri's paper at https://files.sans.org/summit/Digital_Forensics_and_Incident_Response_Summit_2015/PDFs/Windows8SRUMForensicsYogeshKhatri.pdf was essential in the creation of this tool.",
-                       "By modifying the template file you have control of what ends up in the analyzed results.  Try creating an alternate template and passing it with the --XLSX_TEMPLATE option.",
-                       "TIP: When using a SOFTWARE registry file you can add your own SIDS to the 'lookup-Known SIDS' tab!",
-                       "This program was written by Twitter:@markbaggett and @donaldjwilliam5 because @ovie said so.",
-                       "SRUM-DUMP 2.0 will attempt to dump any ESE database! If no template defines a table it will do its best to guess."
-                       ])
+    # 讀取 config.ini 檔案
+    config = configparser.ConfigParser()
+    config.read('config.ini')
 
-if not options.SRUM_INFILE:
-    srum_path = ""
-    if os.path.exists(srum_filpath + "SRUDB.DAT"):
-        srum_path = os.path.join(os.getcwd(), srum_filpath + "SRUDB.DAT")
-    temp_path = pathlib.Path.cwd() / "SRUM_TEMPLATE2.XLSX"
-    if temp_path.exists():
-        temp_path = str(temp_path)
+    # 讀取 [Settings] 區段的各個配置設定
+    output_directory = config.get('Settings', 'output_directory')
+
+    parser = argparse.ArgumentParser(
+        description="Given an SRUM database it will create an XLS spreadsheet with analysis of the data in the database.")
+    parser.add_argument("--SRUM_INFILE", "-i",
+                        help="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
+    parser.add_argument("--XLSX_OUTFILE", "-o", default=f"{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx",
+                        help="Full path to the XLS file that will be created.")
+    parser.add_argument("--XLSX_TEMPLATE", "-t",
+                        help="The Excel Template that specifies what data to extract from the srum database. You can create template_tables with ese_template.py.")
+    parser.add_argument("--REG_HIVE", "-r", dest="reghive",
+                        help="If a registry hive is provided then the names of the network profiles will be resolved.")
+    parser.add_argument(
+        "--quiet", "-q", help="Supress unneeded output messages.", action="store_true")
+    options = parser.parse_args()
+
+    ads = itertools.cycle(["Did you know SANS Automating Infosec with Python SEC573 teaches you to develop Forensics and Incident Response tools?",
+                        "To learn how SRUM and other artifacts can enhance your forensics investigations check out SANS Windows Forensic Analysis FOR500.",
+                        "Yogesh Khatri's paper at https://files.sans.org/summit/Digital_Forensics_and_Incident_Response_Summit_2015/PDFs/Windows8SRUMForensicsYogeshKhatri.pdf was essential in the creation of this tool.",
+                        "By modifying the template file you have control of what ends up in the analyzed results.  Try creating an alternate template and passing it with the --XLSX_TEMPLATE option.",
+                        "TIP: When using a SOFTWARE registry file you can add your own SIDS to the 'lookup-Known SIDS' tab!",
+                        "This program was written by Twitter:@markbaggett and @donaldjwilliam5 because @ovie said so.",
+                        "SRUM-DUMP 2.0 will attempt to dump any ESE database! If no template defines a table it will do its best to guess."
+                        ])
+
+    if not options.SRUM_INFILE:
+        # init
+        srum_path = ""
+        if os.path.exists(srum_filpath + "SRUDB.DAT"):
+            srum_path = os.path.join(os.getcwd(), srum_filpath + "SRUDB.DAT")
+        temp_path = pathlib.Path.cwd() / "SRUM_TEMPLATE2.XLSX"
+        if temp_path.exists():
+            temp_path = str(temp_path)
+        else:
+            temp_path = ""
+        reg_path = ""
+        if os.path.exists("SOFTWARE"):
+            reg_path = os.path.join(os.getcwd(), "SOFTWARE")
+
+
+
+
+        sg.ChangeLookAndFeel('Kayak')
+        layout = [[sg.Text('REQUIRED: Path to SRUDB.DAT')],
+                [sg.Input(srum_path, key="_SRUMPATH_", enable_events=True),
+                sg.FileBrowse(target="_SRUMPATH_")],
+                [sg.Text('REQUIRED: Output folder for SRUM_DUMP_OUTPUT.xlsx')],
+                [sg.Input(os.getcwd(), key='_OUTDIR_'),
+                    sg.FolderBrowse(target='_OUTDIR_')],
+                [sg.Text('REQUIRED: Path to SRUM_DUMP Template')],
+                [sg.Input(temp_path, key="_TEMPATH_"),
+                    sg.FileBrowse(target="_TEMPATH_")],
+                [sg.Text('RECOMMENDED: Path to registry SOFTWARE hive')],
+                [sg.Input(key="_REGPATH_"), sg.FileBrowse(target="_REGPATH_")],
+                [sg.Text("Click here for support via Twitter @MarkBaggett",
+                        enable_events=True, key="_SUPPORT_", text_color="Blue")],
+                [sg.OK(), sg.Cancel()]]
+
+        # Create the Window
+        window = sg.Window('SRUM_DUMP 2.4', layout)
+
+        while True:
+            event, values = window.Read()
+            if event is None:
+                break
+            if event == "_SUPPORT_":
+                webbrowser.open("https://twitter.com/MarkBaggett")
+            if event == 'Cancel':
+                sys.exit(0)
+            if event == "_SRUMPATH_":
+                if str(pathlib.Path(values.get("_SRUMPATH_"))).lower() == "c:\\windows\\system32\\sru\\srudb.dat":
+                    # result = show_live_system_warning()
+                    # if result:
+                    #     window.Element("_SRUMPATH_").Update(result[0])
+                    #     window.Element("_REGPATH_").Update(result[1])
+                    print("Live system warning not implemented yet.")
+                    continue
+            if event == 'OK':
+                tmp_path = pathlib.Path(values.get("_SRUMPATH_"))
+                if not tmp_path.exists() or not tmp_path.is_file():
+                    sg.PopupOK("SRUM DATABASE NOT FOUND.")
+                    continue
+                if not os.path.exists(pathlib.Path(values.get("_OUTDIR_"))):
+                    sg.PopupOK("OUTPUT DIR NOT FOUND.")
+                    continue
+                tmp_path = pathlib.Path(values.get("_TEMPATH_"))
+                if not tmp_path.exists() or not tmp_path.is_file():
+                    sg.PopupOK("SRUM TEMPLATE NOT FOUND.")
+                    continue
+                tmp_path = pathlib.Path(values.get("_REGPATH_"))
+                if values.get("_REGPATH_") and not tmp_path.exists() and not tmp_path.is_file():
+                    sg.PopupOK(
+                        "REGISTRY File not found. (Leave field empty for None.)")
+                    continue
+                break
+
+        window.Close()
+        options.SRUM_INFILE = str(pathlib.Path(values.get("_SRUMPATH_")))
+        options.XLSX_OUTFILE = str(pathlib.Path(
+            values.get("_OUTDIR_")) / f"{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx")
+        options.XLSX_TEMPLATE = str(pathlib.Path(values.get("_TEMPATH_")))
+        options.reghive = str(pathlib.Path(values.get("_REGPATH_")))
+        if options.reghive == ".":
+            options.reghive = ""
     else:
-        temp_path = ""
-    reg_path = ""
-    if os.path.exists("SOFTWARE"):
-        reg_path = os.path.join(os.getcwd(), "SOFTWARE")
+        if not options.XLSX_TEMPLATE:
+            options.XLSX_TEMPLATE = "SRUM_TEMPLATE2.xlsx"
+        if not options.XLSX_OUTFILE:
+            options.XLSX_OUTFILE = f"{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx"
+        if not os.path.exists(options.SRUM_INFILE):
+            print("ESE File Not found: "+options.SRUM_INFILE)
+            sys.exit(1)
+        if not os.path.exists(options.XLSX_TEMPLATE):
+            print("Template File Not found: "+options.XLSX_TEMPLATE)
+            sys.exit(1)
+        if options.reghive and not os.path.exists(options.reghive):
+            print("Registry File Not found: "+options.reghive)
+            sys.exit(1)
+            
+    regsids = {}
+    if options.reghive:
+        interface_table = load_interfaces(options.reghive)
+        regsids = load_registry_sids(options.reghive)
 
-    sg.ChangeLookAndFeel('Kayak')
-    layout = [[sg.Text('REQUIRED: Path to SRUDB.DAT')],
-              [sg.Input(srum_path, key="_SRUMPATH_", enable_events=True),
-               sg.FileBrowse(target="_SRUMPATH_")],
-              [sg.Text('REQUIRED: Output folder for SRUM_DUMP_OUTPUT.xlsx')],
-              [sg.Input(os.getcwd(), key='_OUTDIR_'),
-                  sg.FolderBrowse(target='_OUTDIR_')],
-              [sg.Text('REQUIRED: Path to SRUM_DUMP Template')],
-              [sg.Input(temp_path, key="_TEMPATH_"),
-                  sg.FileBrowse(target="_TEMPATH_")],
-              [sg.Text('RECOMMENDED: Path to registry SOFTWARE hive')],
-              [sg.Input(key="_REGPATH_"), sg.FileBrowse(target="_REGPATH_")],
-              [sg.Text("Click here for support via Twitter @MarkBaggett",
-                       enable_events=True, key="_SUPPORT_", text_color="Blue")],
-              [sg.OK(), sg.Cancel()]]
-
-    # Create the Window
-    window = sg.Window('SRUM_DUMP 2.4', layout)
-
-    while True:
-        event, values = window.Read()
-        if event is None:
-            break
-        if event == "_SUPPORT_":
-            webbrowser.open("https://twitter.com/MarkBaggett")
-        if event == 'Cancel':
-            sys.exit(0)
-        if event == "_SRUMPATH_":
-            if str(pathlib.Path(values.get("_SRUMPATH_"))).lower() == "c:\\windows\\system32\\sru\\srudb.dat":
-                # result = show_live_system_warning()
-                # if result:
-                #     window.Element("_SRUMPATH_").Update(result[0])
-                #     window.Element("_REGPATH_").Update(result[1])
-                print("Live system warning not implemented yet.")
-                continue
-        if event == 'OK':
-            tmp_path = pathlib.Path(values.get("_SRUMPATH_"))
-            if not tmp_path.exists() or not tmp_path.is_file():
-                sg.PopupOK("SRUM DATABASE NOT FOUND.")
-                continue
-            if not os.path.exists(pathlib.Path(values.get("_OUTDIR_"))):
-                sg.PopupOK("OUTPUT DIR NOT FOUND.")
-                continue
-            tmp_path = pathlib.Path(values.get("_TEMPATH_"))
-            if not tmp_path.exists() or not tmp_path.is_file():
-                sg.PopupOK("SRUM TEMPLATE NOT FOUND.")
-                continue
-            tmp_path = pathlib.Path(values.get("_REGPATH_"))
-            if values.get("_REGPATH_") and not tmp_path.exists() and not tmp_path.is_file():
-                sg.PopupOK(
-                    "REGISTRY File not found. (Leave field empty for None.)")
-                continue
-            break
-
-    window.Close()
-    options.SRUM_INFILE = str(pathlib.Path(values.get("_SRUMPATH_")))
-    options.XLSX_OUTFILE = str(pathlib.Path(
-        values.get("_OUTDIR_")) / f"SRUM_DUMP_OUTPUT_{formatted_today}.xlsx")
-    options.XLSX_TEMPLATE = str(pathlib.Path(values.get("_TEMPATH_")))
-    options.reghive = str(pathlib.Path(values.get("_REGPATH_")))
-    if options.reghive == ".":
-        options.reghive = ""
-else:
-    if not options.XLSX_TEMPLATE:
-        options.XLSX_TEMPLATE = "SRUM_TEMPLATE2.xlsx"
-    if not options.XLSX_OUTFILE:
-        options.XLSX_OUTFILE = f"SRUM_DUMP_OUTPUT_{formatted_today}.xlsx"
-    if not os.path.exists(options.SRUM_INFILE):
-        print("ESE File Not found: "+options.SRUM_INFILE)
-        sys.exit(1)
-    if not os.path.exists(options.XLSX_TEMPLATE):
-        print("Template File Not found: "+options.XLSX_TEMPLATE)
-        sys.exit(1)
-    if options.reghive and not os.path.exists(options.reghive):
-        print("Registry File Not found: "+options.reghive)
+    try:
+        warnings.simplefilter("ignore")
+        ese_db = pyesedb.file()
+        ese_db.open(options.SRUM_INFILE)
+        #ese_db = ese.ESENT_DB(options.SRUM_INFILE)
+    except Exception as e:
+        print("I could not open the specified SRUM file. Check your path and file name.")
+        print("Error : ", str(e))
         sys.exit(1)
 
-regsids = {}
-if options.reghive:
-    interface_table = load_interfaces(options.reghive)
-    regsids = load_registry_sids(options.reghive)
+    try:
+        template_wb = openpyxl.load_workbook(filename=options.XLSX_TEMPLATE)
+    except Exception as e:
+        print("I could not open the specified template file %s. Check your path and file name." % (
+            options.XLSX_TEMPLATE))
+        print("Error : ", str(e))
+        sys.exit(1)
 
-try:
-    warnings.simplefilter("ignore")
-    ese_db = pyesedb.file()
-    ese_db.open(options.SRUM_INFILE)
-    #ese_db = ese.ESENT_DB(options.SRUM_INFILE)
-except Exception as e:
-    print("I could not open the specified SRUM file. Check your path and file name.")
-    print("Error : ", str(e))
-    sys.exit(1)
+    skip_tables = ['MSysObjects', 'MSysObjectsShadow',
+                'MSysObjids', 'MSysLocales', 'SruDbIdMapTable']
+    template_tables = load_template_tables(template_wb)
+    template_lookups = load_template_lookups(template_wb)
+    if regsids:
+        template_lookups.get("Known SIDS", {}).update(regsids)
+        # print("REGSIDS!!!")
+        #print(template_lookups.get("Known SIDS"))
+    id_table = load_srumid_lookups(ese_db)
 
-try:
-    template_wb = openpyxl.load_workbook(filename=options.XLSX_TEMPLATE)
-except Exception as e:
-    print("I could not open the specified template file %s. Check your path and file name." % (
-        options.XLSX_TEMPLATE))
-    print("Error : ", str(e))
-    sys.exit(1)
+    target_wb = openpyxl.Workbook()
+    process_srum(ese_db, target_wb)
 
-skip_tables = ['MSysObjects', 'MSysObjectsShadow',
-               'MSysObjids', 'MSysLocales', 'SruDbIdMapTable']
-template_tables = load_template_tables(template_wb)
-template_lookups = load_template_lookups(template_wb)
-if regsids:
-    template_lookups.get("Known SIDS", {}).update(regsids)
-    # print("REGSIDS!!!")
-    #print(template_lookups.get("Known SIDS"))
-id_table = load_srumid_lookups(ese_db)
+    firstsheet = target_wb.get_sheet_by_name("Sheet")
+    target_wb.remove_sheet(firstsheet)
+    print("Writing output file to disk.")
+    try:
+        target_wb.save(options.XLSX_OUTFILE)
+    except Exception as e:
+        print("I was unable to write the output file.  Do you have an old version open?  If not this is probably a path or permissions issue.")
+        print("Error : ", str(e))
 
-target_wb = openpyxl.Workbook()
-process_srum(ese_db, target_wb)
-
-firstsheet = target_wb.get_sheet_by_name("Sheet")
-target_wb.remove_sheet(firstsheet)
-print("Writing output file to disk.")
-try:
-    target_wb.save(options.XLSX_OUTFILE)
-except Exception as e:
-    print("I was unable to write the output file.  Do you have an old version open?  If not this is probably a path or permissions issue.")
-    print("Error : ", str(e))
-
-print("Done.")
+    print("Done.")

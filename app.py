@@ -79,6 +79,11 @@ class Application(tk.Frame):
             self, text="查詢網路流量", command=self.query_network_usage, state=tk.DISABLED)
         self.query_network_button.grid(row=0, column=3)
 
+        # 查詢網路流量按鈕
+        self.query_cpu_table_button = ttk.Button(
+            self, text="查詢CPU使用率(表格)", command=self.query_cpu_table, state=tk.DISABLED)
+        self.query_cpu_table_button.grid(row=0, column=4)
+
         # 偵測異常紀錄按鈕
         # self.detect_anomaly_button = ttk.Button(
         #     self, text="偵測異常紀錄", command=self.detect_anomaly)
@@ -145,6 +150,7 @@ class Application(tk.Frame):
         self.query_energy_button.config(state=tk.NORMAL)
         self.query_cpu_button.config(state=tk.NORMAL)
         self.query_network_button.config(state=tk.NORMAL)
+        self.query_cpu_table_button.config(state=tk.NORMAL)
         # self.detect_anomaly_button.config(state=tk.NORMAL)
 
 
@@ -174,12 +180,6 @@ class Application(tk.Frame):
             df = df[(df['Event Time Stamp'] >= start_date)
                     & (df['Event Time Stamp'] <= end_date)]
 
-            # 設定X軸、Y軸數據
-            # x_data = df['Event Time Stamp']
-            # y_data = df[['DesignedCapacity',
-            #             'FullChargedCapacity', 'Battery Level']]
-            # battery_line, = ax.plot(x_data, y_data)
-
             # 繪圖
             fig, ax = plt.subplots(num="電量狀態")
             battery_line1, = ax.plot(
@@ -197,15 +197,15 @@ class Application(tk.Frame):
                 ['DesignedCapacity', 'FullChargedCapacity', 'Battery Level'])
 
             # 使用 mplcursors 套件顯示數據標籤
-            cursor1 = mplcursors.cursor(battery_line1, hover=True)
-            cursor1.connect("add", lambda sel: sel.annotation.set_text(
-                f"DesignedCapacity: {sel.target[1]:.2f}"))
-            cursor2 = mplcursors.cursor(battery_line2, hover=True)
-            cursor2.connect("add", lambda sel: sel.annotation.set_text(
-                f"FullChargedCapacity: {sel.target[1]:.2f}"))
-            cursor3 = mplcursors.cursor(battery_line3, hover=True)
-            cursor3.connect("add", lambda sel: sel.annotation.set_text(
-                f"Battery Level: {sel.target[1]:.2f}"))
+            # cursor1 = mplcursors.cursor(battery_line1, hover=True)
+            # cursor1.connect("add", lambda sel: sel.annotation.set_text(
+            #     f"DesignedCapacity: {sel.target[1]:.2f}"))
+            # cursor2 = mplcursors.cursor(battery_line2, hover=True)
+            # cursor2.connect("add", lambda sel: sel.annotation.set_text(
+            #     f"FullChargedCapacity: {sel.target[1]:.2f}"))
+            # cursor3 = mplcursors.cursor(battery_line3, hover=True)
+            # cursor3.connect("add", lambda sel: sel.annotation.set_text(
+            #     f"Battery Level: {sel.target[1]:.2f}"))
 
             # 添加邊距
             plt.xticks(rotation=45)
@@ -229,8 +229,7 @@ class Application(tk.Frame):
             # file_path = f"{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx"
 
             # 讀取Excel檔案中名為 "Application Resource Usage" 的資料表
-            df = pd.read_excel(
-                file_path, sheet_name="Application Resource Usage")
+            df = pd.read_excel(file_path, sheet_name="Application Resource Usage")
 
             # 將 '日期' 列轉換為 datetime
             df['Srum Entry Creation'] = pd.to_datetime(
@@ -254,17 +253,31 @@ class Application(tk.Frame):
                 df["Srum Entry Creation"], df["CPU time in Forground"], label="CPU time in Forground", c="red", alpha=0.5)
             background_line, = ax.plot(
                 df["Srum Entry Creation"], df["CPU time in background"], label="CPU time in background", c="blue", alpha=0.5)
+            # app_line, = ax.plot(
+            #     df["Srum Entry Creation"], df["Application"], label="Application", c="green", alpha=0.5)
             ax.set_xlabel("Srum Entry Creation")
             ax.set_ylabel("CPU time (normalized)")
             ax.legend()
 
             # 使用 mplcursors 套件顯示數據標籤
             cursor1 = mplcursors.cursor(foreground_line, hover=True)
-            cursor1.connect("add", lambda sel: sel.annotation.set_text(
-                f"Foreground: {sel.target[1]:.2f}"))
-            cursor2 = mplcursors.cursor(background_line, hover=True)
-            cursor2.connect("add", lambda sel: sel.annotation.set_text(
-                f"Background: {sel.target[1]:.2f}"))
+            @cursor1.connect("add")
+            def on_add(sel):
+                i = int(sel.target.index)
+                app_name = df.iloc[i, 2] # 提取名字 Application
+
+                # 顯示名字
+                if app_name:
+                    app_name = app_name.split('\\')[-1] # 提取路徑最後一個斜線後的名字
+                    sel.annotation.set_text(app_name)
+                else:
+                    sel.annotation.set_text('-')
+
+            # cursor1.connect("add", lambda sel: sel.annotation.set_text(
+            #     f"Foreground: {sel.target[1]:.2f}"))
+            # cursor2 = mplcursors.cursor(background_line, hover=True)
+            # cursor2.connect("add", lambda sel: sel.annotation.set_text(
+            #     f"Background: {sel.target[1]:.2f}"))
 
             # 調整 X 軸標籤角度
             plt.xticks(rotation=45, ha='right')
@@ -287,8 +300,7 @@ class Application(tk.Frame):
         # 在此添加查詢網路流量的程式碼
         try:
             # 讀取 Excel 檔案
-            df = pd.read_excel(f'{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx',
-                               sheet_name='Network Data Usage')
+            df = pd.read_excel(file_path, sheet_name='Network Data Usage')
 
             # 將 User SID 映射為對應的名稱
             df['User SID'] = df['User SID'].apply(map_user_sid)
@@ -354,6 +366,81 @@ class Application(tk.Frame):
             # messagebox.showerror("錯誤", f"發生錯誤: {err}")
             messagebox.showerror("錯誤", f"這個範圍區間沒有資料")
 
+
+    def query_cpu_table(self):
+        """
+            查詢CPU使用率(表格)
+        """
+        print("查詢CPU使用率(表格)")
+        # 在此添加查詢CPU使用率(表格)的程式碼
+        try:
+            # 讀取 Excel 檔案
+            df = pd.read_excel(file_path, sheet_name='Application Resource Usage')
+
+            # 將 User SID 映射為對應的名稱
+            df['User SID'] = df['User SID'].apply(map_user_sid)
+
+            # 選擇需要的欄位
+            df = df[['Srum Entry Creation', 'Application', 'User SID',
+                    'CPU time in Forground', 'CPU time in background']]
+
+            # 將 '日期' 列轉換為 datetime
+            df['Srum Entry Creation'] = pd.to_datetime(
+                df['Srum Entry Creation'])
+
+            # 將開始和結束日期轉換為 datetime
+            start_date = pd.to_datetime(self.start_date)
+            end_date = pd.to_datetime(self.end_date)
+
+            # 使用布林索引來篩選 DataFrame
+            df = df[(df['Srum Entry Creation'] >= start_date)
+                    & (df['Srum Entry Creation'] <= end_date)]
+
+            # 建立 GUI
+            root_network_usege = tk.Tk()
+            root_network_usege.title('CPU使用率(表格)')
+
+            # 建立表格
+            table = ttk.Treeview(root_network_usege)
+
+            # 設定捲軸
+            vsb = ttk.Scrollbar(root_network_usege, orient="vertical", command=table.yview)
+            vsb.pack(side='right', fill='y')
+            table.configure(yscrollcommand=vsb.set)
+
+            # 建立表格欄位
+            table['columns'] = list(df.columns)
+
+            # 設定欄位顯示名稱
+            table.column('#0', width=0, stretch=tk.NO)
+            for i, col in enumerate(df.columns):
+                # 自動調整欄位寬度
+                max_width = max([len(str(item)) for item in df[col]]) * 10
+                max_width = min(max_width, 300)
+
+                # App欄
+                if i == 1:
+                    table.column(col, width=max_width, minwidth=50, anchor=tk.W)
+                else:
+                    table.column(col, width=max_width, minwidth=50, anchor=tk.CENTER)
+                table.heading(
+                    col, text=col, command=lambda _col=col: sort_column(table, _col, False))
+
+            # 將資料填入表格中
+            for index, row in df.iterrows():
+                table.insert(parent='', index='end', iid=index,
+                             text='', values=list(row))
+
+            # 調整表格大小
+            table.pack(fill='both', expand=True)
+
+            # 執行 GUI
+            root_network_usege.mainloop()
+
+        except Exception as err:
+            # messagebox.showerror("錯誤", f"發生錯誤: {err}")
+            messagebox.showerror("錯誤", f"這個範圍區間沒有資料")
+
     def detect_anomaly(self):
         """
             偵測異常紀錄
@@ -363,8 +450,7 @@ class Application(tk.Frame):
 
         try:
             # 讀取 Excel 檔案
-            df = pd.read_excel(
-                f'{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx', sheet_name="Application Resource Usage")
+            df = pd.read_excel(file_path, sheet_name="Application Resource Usage")
 
             # 篩選符合條件的資料
             filtered_df = df[df["CPU time in Forground"]/2300000000 > 1]
@@ -541,7 +627,7 @@ if __name__ == "__main__":
 
     # 創建 GUI
     root = tk.Tk()
-    root.geometry("550x100")
+    root.geometry("600x100")
     root.title("系統資源監控")
     app = Application(master=root)
 

@@ -559,9 +559,6 @@ if __name__ == "__main__":
         if os.path.exists("SOFTWARE"):
             reg_path = os.path.join(os.getcwd(), "SOFTWARE")
 
-
-
-
         sg.ChangeLookAndFeel('Kayak')
         layout = [[sg.Text('REQUIRED: Path to SRUDB.DAT')],
                 [sg.Input(srum_path, key="_SRUMPATH_", enable_events=True),

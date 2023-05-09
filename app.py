@@ -13,8 +13,6 @@ import pandas as pd
 import numpy as np
 
 import matplotlib.pyplot as plt
-# import matplotlib.backends.backend_tkagg as tkagg
-# from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.dates as mdates
 from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
 from matplotlib.ticker import MultipleLocator
@@ -26,6 +24,7 @@ import mplcursors
 import win32api
 import win32security
 import psutil
+
 
 class CustomToolbar(NavigationToolbar2Tk):
     """
@@ -58,9 +57,11 @@ class CustomDateEntry(DateEntry):
         DateEntry.__init__(self, master=master,
                            date_pattern='yyyy年mm月dd日', **kw, width=15)
 
+
 class Application(tk.Frame):
     """
-    GUI介面先取得最新SRUM檔案再顯示按鈕
+    GUI介面
+    先取得最新SRUM檔案再顯示按鈕
     """
 
     def __init__(self, master=None):
@@ -69,64 +70,100 @@ class Application(tk.Frame):
         self.pack()
         self.start_date = None
         self.end_date = None
+        self.srum_date = formatted_today
         self.create_widgets()
 
     def create_widgets(self):
         """
             創建視窗元件
         """
+        btn_width = 22
+
+        # row 1 =====================================================================================================
         # 取得最新的 SRUM 檔案按鈕
         self.get_srum_button = ttk.Button(
-            self, text="取得最新的 SRUM 檔案", command=self.get_srum_file, state=tk.DISABLED)
+            self, text="取得最新的 SRUM 檔案", command=self.get_srum_file, width=btn_width)
         self.get_srum_button.grid(row=0, column=0)
 
+        # row 2 =====================================================================================================
         # 查詢電量狀態按鈕
         self.query_energy_button = ttk.Button(
-            self, text="查詢電量狀態", command=self.query_energy_usage, state=tk.DISABLED)
-        self.query_energy_button.grid(row=0, column=1)
+            self, text="查詢電量狀態", command=self.query_energy_usage, width=btn_width, state=tk.DISABLED)
+        self.query_energy_button.grid(row=1, column=0)
 
         # 查詢 CPU 使用率按鈕
         self.query_cpu_button = ttk.Button(
-            self, text="查詢CPU使用率", command=self.query_cpu_usage, state=tk.DISABLED)
-        self.query_cpu_button.grid(row=0, column=2)
+            self, text="查詢CPU使用率", command=self.query_cpu_usage, width=btn_width, state=tk.DISABLED)
+        self.query_cpu_button.grid(row=1, column=1)
 
         # 查詢網路流量按鈕
         self.query_network_button = ttk.Button(
-            self, text="查詢應用程式網路流量", command=self.query_network_usage, state=tk.DISABLED)
-        self.query_network_button.grid(row=0, column=3)
+            self, text="查詢應用程式網路流量", command=self.query_network_usage, width=btn_width, state=tk.DISABLED)
+        self.query_network_button.grid(row=1, column=2)
 
         # 查詢網路流量按鈕
         self.query_cpu_table_button = ttk.Button(
-            self, text="查詢應用程式CPU時間", command=self.query_cpu_table, state=tk.DISABLED)
-        self.query_cpu_table_button.grid(row=0, column=4)
+            self, text="查詢應用程式CPU時間", command=self.query_cpu_table, width=btn_width, state=tk.DISABLED)
+        self.query_cpu_table_button.grid(row=1, column=3)
 
         # 偵測異常紀錄按鈕
         # self.detect_anomaly_button = ttk.Button(
         #     self, text="偵測異常紀錄", command=self.detect_anomaly)
         # self.detect_anomaly_button.grid(row=0, column=4)
 
+        # row 3 =====================================================================================================
         # 開始日期 Label 和 Calendar
         self.start_date_label = ttk.Label(self, text="開始日期：")
-        self.start_date_label.grid(row=1, column=0)
+        self.start_date_label.grid(row=2, column=0)
         self.start_cal = CustomDateEntry(self)
-        # self.start_cal = DateEntry(self)
-        self.start_cal.grid(row=1, column=1)
+        self.start_cal.grid(row=2, column=1)
 
+        # 開始/結束確定按鈕
+        self.date_confirm_button = ttk.Button(
+            self, text="確定", command=self.confirm_dates)
+        self.date_confirm_button.grid(row=2, column=2, columnspan=1)
+
+        # row 4 =====================================================================================================
         # 結束日期 Label 和 Calendar
         self.end_date_label = ttk.Label(self, text="結束日期：")
-        self.end_date_label.grid(row=2, column=0)
+        self.end_date_label.grid(row=3, column=0)
         self.end_cal = CustomDateEntry(self)
-        # self.end_cal = DateEntry(self)
-        self.end_cal.grid(row=2, column=1)
+        self.end_cal.grid(row=3, column=1)
 
-        # 確定按鈕
-        self.confirm_button = ttk.Button(
-            self, text="確定", command=self.confirm_dates)
-        self.confirm_button.grid(row=2, column=2, columnspan=2)
+        # row 5 =====================================================================================================
+        # SRUM檔案日期選擇器
+        self.srum_date_label = ttk.Label(self, text="SRUM檔案日期：")
+        self.srum_date_label.grid(row=4, column=0)
+        self.srum_cal = CustomDateEntry(self)
+        self.srum_cal.grid(row=4, column=1)
+
+        # SRUM檔案日期選擇確定按鈕
+        self.srum_confirm_button = ttk.Button(
+            self, text="確定", command=self.confirm_srum_date, state=tk.DISABLED)
+        self.srum_confirm_button.grid(row=4, column=2, columnspan=1)
+
+        # 初期化
+        self.start_date = self.start_cal.get_date()
+        self.end_date = self.end_cal.get_date()
+
+        # row 5 =====================================================================================================
+
+    def confirm_srum_date(self):
+        """note"""
+        global formatted_today, file_path
+
+        self.srum_date = self.srum_cal.get_date()
+
+        # 顯示按鈕
+        if not self.srum_date is None:
+            formatted_today = self.srum_date.strftime("%Y%m%d")
+            print("SRUM日期:", formatted_today)
+            file_path = f"{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx"
+            # 檔案存在確認
+            pre_execute(file_path)
 
     def confirm_dates(self):
         """note"""
-        # self.srum_btn_flg = False
         self.start_date = self.start_cal.get_date()
         self.end_date = self.end_cal.get_date()
 
@@ -142,13 +179,10 @@ class Application(tk.Frame):
         # 在此添加取得最新的 SRUM 檔案的程式碼
 
         # 執行完畢後顯示按鈕
-        if self.start_date is None or self.end_date is None:
-            messagebox.showerror("錯誤", "日期尚未選擇")
-        elif not os.path.exists(file_path):
+        if not os.path.exists(file_path):
             messagebox.showerror("提醒", "今日的檔案尚未生成")
-            subprocess.Popen('python srum_dump2.py')
+            subprocess.Popen('python srum_dump2.py')  # 生成output檔案
         else:
-            # 執行 srum_dump2.exe
             self.show_buttons()
 
     def show_buttons(self):
@@ -160,7 +194,7 @@ class Application(tk.Frame):
         self.query_cpu_button.config(state=tk.NORMAL)
         self.query_network_button.config(state=tk.NORMAL)
         self.query_cpu_table_button.config(state=tk.NORMAL)
-        # self.detect_anomaly_button.config(state=tk.NORMAL)
+        self.srum_confirm_button.config(state=tk.NORMAL)
 
     def query_energy_usage(self):
         """
@@ -170,11 +204,11 @@ class Application(tk.Frame):
         # 在此添加查詢電量狀態的程式碼
 
         try:
-            plt.close()
+            # 執行前處理
+            pre_execute(file_path)
 
             # 讀取SRUM_DUMP_OUTPUT.xlsx檔案
             df = pd.read_excel(file_path, sheet_name='Energy Usage')
-            print(df['Event Time Stamp'].describe())
 
             # 取出需要的欄位
             df = df[['Event Time Stamp', 'DesignedCapacity',
@@ -193,9 +227,8 @@ class Application(tk.Frame):
 
             # 如果沒有資料，則顯示錯誤訊息
             if df.empty:
-                raise Exception
-
-            print(start_date, end_date, df.describe())
+                print('此範圍區間沒有資料')
+                raise Exception('此範圍區間沒有資料')
 
             # 繪圖
             _, ax = plt.subplots(num="電量狀態")
@@ -219,22 +252,19 @@ class Application(tk.Frame):
                 f"DesignedCapacity: {sel.target[1]:.2f}"))
 
             # 計算最佳刻度
-            data_min = min(df['DesignedCapacity'].min(), df['FullChargedCapacity'].min(), df['Battery Level'].min())
-            data_max = min(df['DesignedCapacity'].max(), df['FullChargedCapacity'].max(), df['Battery Level'].max())
-            print(data_min, data_max)
-            # min_x, max_x, interval_x = calculate_ticks(df['Event Time Stamp'].min().toordinal(), df['Event Time Stamp'].max().toordinal())
+            data_min = min(df['DesignedCapacity'].min(
+            ), df['FullChargedCapacity'].min(), df['Battery Level'].min())
+            data_max = max(df['DesignedCapacity'].max(
+            ), df['FullChargedCapacity'].max(), df['Battery Level'].max())
             min_y, max_y, interval_y = calculate_ticks(data_min, data_max)
 
             # 設置x軸和y軸的最小值和最大值
-            # plt.xlim(min_x, max_x)
             plt.ylim(min_y, max_y)
 
             # 設置主要刻度
-            # plt.gca().xaxis.set_major_locator(plt.MultipleLocator(interval_x))
             plt.gca().yaxis.set_major_locator(plt.MultipleLocator(interval_y))
 
             # 設置輔助刻度
-            # plt.gca().xaxis.set_minor_locator(plt.MultipleLocator(interval_x / 5))
             plt.gca().yaxis.set_minor_locator(plt.MultipleLocator(interval_y / 5))
 
             # 添加邊距
@@ -248,14 +278,16 @@ class Application(tk.Frame):
             ax.format_coord = format_coord
 
             # 添加格線
-            ax.grid(which='major', color='gray', linestyle='-', linewidth=0.8) # 主要
-            ax.grid(which='minor', color='gray', linestyle='--', linewidth=0.4, alpha=0.5) # 輔助
+            ax.grid(which='major', color='gray',
+                    linestyle='-', linewidth=0.8)  # 主要
+            ax.grid(which='minor', color='gray', linestyle='--',
+                    linewidth=0.4, alpha=0.5)  # 輔助
 
             # 顯示圖表
             plt.show()
 
-        except Exception as err:
-            messagebox.showerror("錯誤", f"發生錯誤: {err}")
+        except Exception as e:
+            messagebox.showerror("錯誤", f"{e}")
 
     def query_cpu_usage(self):
         """
@@ -265,17 +297,20 @@ class Application(tk.Frame):
         # 在此添加查詢CPU使用率的程式碼
 
         try:
+            # 執行前處理
+            pre_execute(file_path)
+
             # 讀取Excel檔案中名為 "Application Resource Usage" 的資料表
             df = pd.read_excel(
                 file_path, sheet_name="Application Resource Usage")
             df['Srum Entry Creation'] = pd.to_datetime(
-                df['Srum Entry Creation']) # 將開始和結束日期轉換為 datetime
+                df['Srum Entry Creation'])  # 將開始和結束日期轉換為 datetime
 
             # App Timeline Provider
             df_timeline = pd.read_excel(
                 file_path, sheet_name="App Timeline Provider")
             df_timeline['Srum Entry Creation'] = pd.to_datetime(
-                df_timeline['Srum Entry Creation']) # 將開始和結束日期轉換為 datetime
+                df_timeline['Srum Entry Creation'])  # 將開始和結束日期轉換為 datetime
 
             # 將開始和結束日期轉換為 datetime
             start_date = pd.to_datetime(self.start_date)
@@ -287,37 +322,12 @@ class Application(tk.Frame):
 
             # 如果沒有資料，則顯示錯誤訊息
             if df.empty:
-                raise Exception
+                raise Exception('此範圍區間沒有資料')
 
             # 1.計算應用程序的CPU時間消耗(秒)
             # unit: 0.0000001 秒
             df["CPU time in Forground"] *= 0.0000001
             df["CPU time in background"] *= 0.0000001
-
-            # # 初始化實際執行時間和百分比列表
-            # cpu_actual_runtime = []
-            # cpu_usage = []
-
-            # # 迭代 df1 的每一行
-            # for app_name, row in df.iterrows():
-            #     # 在 df2 中查找應用名稱對應的結束時間
-            #     end_time = df_timeline.loc[app_name, 'EndTime'] if app_name in df_timeline.index else None
-
-            #     # 計算實際執行時間
-            #     if end_time is not None:
-            #         runtime = (end_time - row['Srum Entry Creation']).seconds
-            #     else:
-            #         runtime = row['CPU time in Forground']
-
-            #     cpu_actual_runtime.append(runtime)
-
-            #     # 計算百分比
-            #     perc = round(runtime / row['CPU執行時間'] * 100, 1)
-            #     cpu_usage.append(perc)
-
-            # # 將計算出的實際執行時間和百分比添加到 df1 中
-            # df['cpu_actual_runtime'] = cpu_actual_runtime
-            # df['cpu_usage'] = cpu_usage
 
             # 繪製圖表
             fig, ax = plt.subplots(num="CPU使用率")
@@ -347,31 +357,24 @@ class Application(tk.Frame):
                 else:
                     sel.annotation.set_text('-')
 
-            # cursor1.connect("add", lambda sel: sel.annotation.set_text(
-            #     f"Foreground: {sel.target[1]:.2f}"))
-            # cursor2 = mplcursors.cursor(background_line, hover=True)
-            # cursor2.connect("add", lambda sel: sel.annotation.set_text(
-            #     f"Background: {sel.target[1]:.2f}"))
-
             # 計算最佳刻度
-            # min_x, max_x, interval_x = calculate_ticks(df['Event Time Stamp'].min().toordinal(), df['Event Time Stamp'].max().toordinal())
-            min_y, max_y, interval_y = calculate_ticks(df['CPU time in Forground'].min(), df['CPU time in Forground'].max())
+            min_y, max_y, interval_y = calculate_ticks(
+                df['CPU time in Forground'].min(), df['CPU time in Forground'].max())
 
             # 設置x軸和y軸的最小值和最大值
-            # plt.xlim(min_x, max_x)
             plt.ylim(min_y, max_y)
 
             # 設置主要刻度
-            # plt.gca().xaxis.set_major_locator(plt.MultipleLocator(interval_x))
             plt.gca().yaxis.set_major_locator(plt.MultipleLocator(interval_y))
 
             # 設置輔助刻度
-            # plt.gca().xaxis.set_minor_locator(plt.MultipleLocator(interval_x / 5))
             plt.gca().yaxis.set_minor_locator(plt.MultipleLocator(interval_y / 5))
 
             # 添加格線
-            ax.grid(which='major', color='gray', linestyle='-', linewidth=0.8) # 主要
-            ax.grid(which='minor', color='gray', linestyle='--', linewidth=0.4, alpha=0.5) # 輔助
+            ax.grid(which='major', color='gray',
+                    linestyle='-', linewidth=0.8)  # 主要
+            ax.grid(which='minor', color='gray', linestyle='--',
+                    linewidth=0.4, alpha=0.5)  # 輔助
 
             # 添加邊距
             plt.xticks(rotation=45)
@@ -385,8 +388,8 @@ class Application(tk.Frame):
             # 顯示圖表
             plt.show()
 
-        except:
-            messagebox.showerror("錯誤", "這個範圍區間沒有資料")
+        except Exception as e:
+            messagebox.showerror("錯誤", f"{e}")
 
     def query_network_usage(self):
         """
@@ -394,7 +397,11 @@ class Application(tk.Frame):
         """
         print("查詢網路流量")
         # 在此添加查詢網路流量的程式碼
+
         try:
+            # 執行前處理
+            pre_execute(file_path)
+
             # 讀取 Excel 檔案
             df = pd.read_excel(file_path, sheet_name='Network Data Usage')
 
@@ -419,7 +426,7 @@ class Application(tk.Frame):
 
             # 如果沒有資料，則顯示錯誤訊息
             if df.empty:
-                raise Exception
+                raise Exception('此範圍區間沒有資料')
 
             # 建立 GUI
             root_network_usege = tk.Tk()
@@ -465,8 +472,8 @@ class Application(tk.Frame):
             # 執行 GUI
             root_network_usege.mainloop()
 
-        except:
-            messagebox.showerror("錯誤", "這個範圍區間沒有資料")
+        except Exception as e:
+            messagebox.showerror("錯誤", f"{e}")
 
     def query_cpu_table(self):
         """
@@ -474,7 +481,11 @@ class Application(tk.Frame):
         """
         print("查詢CPU使用率(表格)")
         # 在此添加查詢CPU使用率(表格)的程式碼
+
         try:
+            # 執行前處理
+            pre_execute(file_path)
+
             # 讀取 Excel 檔案
             df = pd.read_excel(
                 file_path, sheet_name='Application Resource Usage')
@@ -500,7 +511,7 @@ class Application(tk.Frame):
 
             # 如果沒有資料，則顯示錯誤訊息
             if df.empty:
-                raise Exception
+                raise Exception('此範圍區間沒有資料')
 
             # 建立 GUI
             root_network_usege = tk.Tk()
@@ -546,72 +557,88 @@ class Application(tk.Frame):
             # 執行 GUI
             root_network_usege.mainloop()
 
-        except:
-            messagebox.showerror("錯誤", "這個範圍區間沒有資料")
+        except Exception as e:
+            messagebox.showerror("錯誤", f"{e}")
 
-    def detect_anomaly(self):
-        """
-            偵測異常紀錄
-        """
-        print("偵測異常紀錄")
-        # 在此添加偵測異常紀錄的程式碼
+    # def detect_anomaly(self):
+    #     """
+    #         偵測異常紀錄
+    #     """
+    #     print("偵測異常紀錄")
+    #     # 在此添加偵測異常紀錄的程式碼
 
-        try:
-            # 讀取 Excel 檔案
-            df = pd.read_excel(
-                file_path, sheet_name="Application Resource Usage")
+    #     try:
+    #         # 執行前處理
+    #         pre_execute(file_path)
 
-            # 篩選符合條件的資料
-            filtered_df = df[df["CPU time in Forground"]/cpu_speed > 1000]
-            filtered_df = filtered_df[[
-                "Srum Entry Creation", "Application", "User SID", "CPU time in Forground"]]
-            filtered_df = filtered_df.reset_index(drop=True)
-            filtered_df["User SID"] = filtered_df["User SID"].apply(
-                map_user_sid)
+    #         # 讀取 Excel 檔案
+    #         df = pd.read_excel(
+    #             file_path, sheet_name="Application Resource Usage")
 
-            # 創建新視窗，顯示篩選後的資料
-            if len(filtered_df) == 0:
-                # result_label.config(text="No data found")
-                print("Error: Could not read file")
-            else:
-                # root = tk.Tk()
-                new_window = tk.Tk()
-                new_window.title("Filtered Data")
+    #         # 篩選符合條件的資料
+    #         filtered_df = df[df["CPU time in Forground"]/cpu_speed > 1000]
+    #         filtered_df = filtered_df[[
+    #             "Srum Entry Creation", "Application", "User SID", "CPU time in Forground"]]
+    #         filtered_df = filtered_df.reset_index(drop=True)
+    #         filtered_df["User SID"] = filtered_df["User SID"].apply(
+    #             map_user_sid)
 
-                # 創建 Treeview 元件
-                tree = ttk.Treeview(new_window, selectmode='browse')
-                tree.pack(fill='both', expand=True)
+    #         # 創建新視窗，顯示篩選後的資料
+    #         if len(filtered_df) == 0:
+    #             # result_label.config(text="No data found")
+    #             print("Error: Could not read file")
+    #         else:
+    #             # root = tk.Tk()
+    #             new_window = tk.Tk()
+    #             new_window.title("Filtered Data")
 
-                # 設定欄位
-                tree["columns"] = ["Srum Entry Creation",
-                                   "Application", "User SID", "CPU time in Forground"]
-                tree.column("#0", width=0, stretch=tk.NO)
-                tree.column("Srum Entry Creation", width=150,
-                            minwidth=50, anchor=tk.CENTER)
-                tree.column("Application", width=150,
-                            minwidth=50, anchor=tk.CENTER)
-                tree.column("User SID", width=150,
-                            minwidth=50, anchor=tk.CENTER)
-                tree.column("CPU time in Forground", width=150,
-                            minwidth=50, anchor=tk.CENTER)
+    #             # 創建 Treeview 元件
+    #             tree = ttk.Treeview(new_window, selectmode='browse')
+    #             tree.pack(fill='both', expand=True)
 
-                # 設定欄位標題
-                tree.heading("Srum Entry Creation",
-                             text="Srum Entry Creation", anchor=tk.CENTER)
-                tree.heading("Application", text="Application",
-                             anchor=tk.CENTER)
-                tree.heading("User SID", text="User SID", anchor=tk.CENTER)
-                tree.heading("CPU time in Forground/2300000000",
-                             text="CPU time in Forground(S)", anchor=tk.CENTER)
+    #             # 設定欄位
+    #             tree["columns"] = ["Srum Entry Creation",
+    #                                "Application", "User SID", "CPU time in Forground"]
+    #             tree.column("#0", width=0, stretch=tk.NO)
+    #             tree.column("Srum Entry Creation", width=150,
+    #                         minwidth=50, anchor=tk.CENTER)
+    #             tree.column("Application", width=150,
+    #                         minwidth=50, anchor=tk.CENTER)
+    #             tree.column("User SID", width=150,
+    #                         minwidth=50, anchor=tk.CENTER)
+    #             tree.column("CPU time in Forground", width=150,
+    #                         minwidth=50, anchor=tk.CENTER)
 
-                # 加入資料
-                for i, row in filtered_df.iterrows():
-                    tree.insert("", i, values=tuple(row))
+    #             # 設定欄位標題
+    #             tree.heading("Srum Entry Creation",
+    #                          text="Srum Entry Creation", anchor=tk.CENTER)
+    #             tree.heading("Application", text="Application",
+    #                          anchor=tk.CENTER)
+    #             tree.heading("User SID", text="User SID", anchor=tk.CENTER)
+    #             tree.heading("CPU time in Forground/2300000000",
+    #                          text="CPU time in Forground(S)", anchor=tk.CENTER)
 
-            root.mainloop()
+    #             # 加入資料
+    #             for i, row in filtered_df.iterrows():
+    #                 tree.insert("", i, values=tuple(row))
 
-        except:
-            messagebox.showerror("錯誤", "這個範圍區間沒有資料")
+    #         root.mainloop()
+
+    #     except:
+    #         messagebox.showerror("錯誤", "這個範圍區間沒有資料")
+
+
+def pre_execute(get_file_path):
+    """
+    執行前的準備
+    """
+    # 關閉所有圖表
+    plt.close()
+
+    # 檢查檔案是否存在
+    if not os.path.isfile(get_file_path):
+        messagebox.showerror("錯誤", "檔案不存在")
+
 
 def calculate_ticks(min_value, max_value):
     """
@@ -656,6 +683,7 @@ def calculate_ticks(min_value, max_value):
         else:
             ck_time += 1
 
+
 def sort_column(tree, col, reverse):
     """
     排序表格欄位
@@ -682,11 +710,9 @@ def map_user_sid(sid):
     """
     將 User SID 映射為對應的名稱
     """
-    # 檢查是否為空值
+    # 檢查各個 SID 項目
     if sid == 'S-1-5-18 ( Local System)':
         return 'Local System'
-    # elif sid == 'S-1-5-21-2506843646-2876841158-3598199272-1001( unknown)':
-    #     return 'user'
     elif sid == 'S-1-5-19 ( NT Authority)':
         return 'NT Authority'
     elif sid == 'S-1-5-20 ( NT Authority)':
@@ -726,6 +752,9 @@ def get_user_name_from_sid(sid):
 # 執行程式
 if __name__ == "__main__":
 
+    # 獲取當前目錄路徑
+    dir_path = os.path.dirname(__file__)
+
     # 獲取當前日期
     today = datetime.now()
 
@@ -734,10 +763,12 @@ if __name__ == "__main__":
 
     # 讀取 config.ini 檔案
     config = configparser.ConfigParser()
-    config.read('config.ini')
+    config_path = os.path.join(dir_path, 'config.ini')
+    config.read(config_path)
 
     # 讀取 [Settings] 區段的各個配置設定
     output_directory = config.get('Settings', 'output_directory')
+    output_directory = os.path.join(dir_path, output_directory)
 
     # SRUM_DUMP_OUTPUT.xlex檔案路徑
     file_path = f"{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx"
@@ -745,15 +776,15 @@ if __name__ == "__main__":
     # output.xlex儲存資料夾
     if not os.path.exists(output_directory):
         os.makedirs(output_directory)
-    
+
     # 獲取 CPU 速度
     cpu_info = psutil.cpu_freq()
-    cpu_speed = cpu_info.current*1000000 # CPU速度（週期/秒）ex:2300000000
+    cpu_speed = cpu_info.current*1000000  # CPU速度（週期/秒）ex:2300000000
     print(f"CPU速度：{cpu_speed} Hz")
 
     # 創建 GUI
     root = tk.Tk()
-    root.geometry("600x100")
+    root.geometry("640x140")
     root.title("系統資源監控")
     app = Application(master=root)
 

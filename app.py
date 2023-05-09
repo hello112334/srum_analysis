@@ -92,12 +92,12 @@ class Application(tk.Frame):
 
         # 查詢網路流量按鈕
         self.query_network_button = ttk.Button(
-            self, text="查詢網路流量(表格)", command=self.query_network_usage, state=tk.DISABLED)
+            self, text="查詢應用程式網路流量", command=self.query_network_usage, state=tk.DISABLED)
         self.query_network_button.grid(row=0, column=3)
 
         # 查詢網路流量按鈕
         self.query_cpu_table_button = ttk.Button(
-            self, text="查詢CPU使用率(表格)", command=self.query_cpu_table, state=tk.DISABLED)
+            self, text="查詢應用程式CPU時間", command=self.query_cpu_table, state=tk.DISABLED)
         self.query_cpu_table_button.grid(row=0, column=4)
 
         # 偵測異常紀錄按鈕
@@ -170,8 +170,11 @@ class Application(tk.Frame):
         # 在此添加查詢電量狀態的程式碼
 
         try:
+            plt.close()
+
             # 讀取SRUM_DUMP_OUTPUT.xlsx檔案
             df = pd.read_excel(file_path, sheet_name='Energy Usage')
+            print(df['Event Time Stamp'].describe())
 
             # 取出需要的欄位
             df = df[['Event Time Stamp', 'DesignedCapacity',
@@ -187,6 +190,12 @@ class Application(tk.Frame):
             # 使用布林索引來篩選 DataFrame
             df = df[(df['Event Time Stamp'] >= start_date)
                     & (df['Event Time Stamp'] <= end_date)]
+
+            # 如果沒有資料，則顯示錯誤訊息
+            if df.empty:
+                raise Exception
+
+            print(start_date, end_date, df.describe())
 
             # 繪圖
             _, ax = plt.subplots(num="電量狀態")
@@ -276,6 +285,9 @@ class Application(tk.Frame):
             df = df[(df['Srum Entry Creation'] >= start_date)
                     & (df['Srum Entry Creation'] <= end_date)]
 
+            # 如果沒有資料，則顯示錯誤訊息
+            if df.empty:
+                raise Exception
 
             # 1.計算應用程序的CPU時間消耗(秒)
             # unit: 0.0000001 秒
@@ -405,6 +417,10 @@ class Application(tk.Frame):
             df = df[(df['SRUM ENTRY CREATION'] >= start_date)
                     & (df['SRUM ENTRY CREATION'] <= end_date)]
 
+            # 如果沒有資料，則顯示錯誤訊息
+            if df.empty:
+                raise Exception
+
             # 建立 GUI
             root_network_usege = tk.Tk()
             root_network_usege.title('網路流量')
@@ -481,6 +497,10 @@ class Application(tk.Frame):
             # 使用布林索引來篩選 DataFrame
             df = df[(df['Srum Entry Creation'] >= start_date)
                     & (df['Srum Entry Creation'] <= end_date)]
+
+            # 如果沒有資料，則顯示錯誤訊息
+            if df.empty:
+                raise Exception
 
             # 建立 GUI
             root_network_usege = tk.Tk()

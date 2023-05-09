@@ -521,6 +521,7 @@ if __name__ == "__main__":
 
     # 讀取 [Settings] 區段的各個配置設定
     output_directory = config.get('Settings', 'output_directory')
+    template_file = config.get('Settings', 'template_file')
 
     parser = argparse.ArgumentParser(
         description="Given an SRUM database it will create an XLS spreadsheet with analysis of the data in the database.")
@@ -550,7 +551,7 @@ if __name__ == "__main__":
         srum_path = ""
         if os.path.exists(srum_filpath + "SRUDB.DAT"):
             srum_path = os.path.join(os.getcwd(), srum_filpath + "SRUDB.DAT")
-        temp_path = pathlib.Path.cwd() / "SRUM_TEMPLATE2.XLSX"
+        temp_path = pathlib.Path.cwd() / template_file
         if temp_path.exists():
             temp_path = str(temp_path)
         else:
@@ -623,7 +624,7 @@ if __name__ == "__main__":
             options.reghive = ""
     else:
         if not options.XLSX_TEMPLATE:
-            options.XLSX_TEMPLATE = "SRUM_TEMPLATE2.xlsx"
+            options.XLSX_TEMPLATE = template_file
         if not options.XLSX_OUTFILE:
             options.XLSX_OUTFILE = f"{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx"
         if not os.path.exists(options.SRUM_INFILE):

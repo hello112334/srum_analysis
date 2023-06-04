@@ -1,0 +1,3 @@
+settings:
+  output_directory: output
+  template_file: SRUM_TEMPLATE3.XLSX

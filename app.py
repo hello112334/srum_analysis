@@ -3,28 +3,29 @@ SRUM分析工具
 """
 import os
 import subprocess
-import configparser
+# import configparser
+import yaml
+import mplcursors
 
-import tkinter as tk
-from tkinter import ttk
-from tkinter import messagebox
 from datetime import datetime
 import pandas as pd
 import numpy as np
-
+# tkinter
+import tkinter as tk
+from tkinter import ttk
+from tkinter import messagebox
+from tkinter import filedialog
+from tkcalendar import DateEntry
+# matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
 from matplotlib.ticker import MultipleLocator
 
-from tkcalendar import DateEntry
-import mplcursors
-
 # win32
 import win32api
 import win32security
 import psutil
-
 
 class CustomToolbar(NavigationToolbar2Tk):
     """
@@ -85,6 +86,10 @@ class Application(tk.Frame):
             self, text="取得最新的 SRUM 檔案", command=self.get_srum_file, width=btn_width)
         self.get_srum_button.grid(row=0, column=0)
 
+        self.select_srum_button = ttk.Button(
+            self, text="選擇 SRUM 檔案", command=self.select_srum_file, width=btn_width, state=tk.DISABLED)
+        self.select_srum_button.grid(row=0, column=1)
+
         # row 2 =====================================================================================================
         # 查詢電量狀態按鈕
         self.query_energy_button = ttk.Button(
@@ -131,16 +136,16 @@ class Application(tk.Frame):
         self.end_cal.grid(row=3, column=1)
 
         # row 5 =====================================================================================================
-        # SRUM檔案日期選擇器
-        self.srum_date_label = ttk.Label(self, text="SRUM檔案日期：")
-        self.srum_date_label.grid(row=4, column=0)
-        self.srum_cal = CustomDateEntry(self)
-        self.srum_cal.grid(row=4, column=1)
+        # # SRUM檔案日期選擇器
+        # self.srum_date_label = ttk.Label(self, text="SRUM檔案日期：")
+        # self.srum_date_label.grid(row=4, column=0)
+        # self.srum_cal = CustomDateEntry(self)
+        # self.srum_cal.grid(row=4, column=1)
 
-        # SRUM檔案日期選擇確定按鈕
-        self.srum_confirm_button = ttk.Button(
-            self, text="確定", command=self.confirm_srum_date, state=tk.DISABLED)
-        self.srum_confirm_button.grid(row=4, column=2, columnspan=1)
+        # # SRUM檔案日期選擇確定按鈕
+        # self.srum_confirm_button = ttk.Button(
+        #     self, text="確定", command=self.confirm_srum_date, state=tk.DISABLED)
+        # self.srum_confirm_button.grid(row=4, column=2, columnspan=1)
 
         # 初期化
         self.start_date = self.start_cal.get_date()
@@ -148,19 +153,28 @@ class Application(tk.Frame):
 
         # row 5 =====================================================================================================
 
-    def confirm_srum_date(self):
+    def select_srum_file(self):
         """note"""
-        global formatted_today, file_path
+        global file_path
+        selected_file_path = filedialog.askopenfilename(initialdir="/", title="Select a File",
+                                            filetypes=(("Xlsx files", "*.xlsx"), ("All files", "*.*")))
+        if selected_file_path:
+            print(f"Seletted: {selected_file_path}")
+            file_path = selected_file_path
 
-        self.srum_date = self.srum_cal.get_date()
+    # def confirm_srum_date(self):
+    #     """note"""
+    #     global formatted_today, file_path
 
-        # 顯示按鈕
-        if not self.srum_date is None:
-            formatted_today = self.srum_date.strftime("%Y%m%d")
-            print("SRUM日期:", formatted_today)
-            file_path = f"{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx"
-            # 檔案存在確認
-            pre_execute(file_path)
+    #     self.srum_date = self.srum_cal.get_date()
+
+    #     # 顯示按鈕
+    #     if not self.srum_date is None:
+    #         formatted_today = self.srum_date.strftime("%Y%m%d")
+    #         print("SRUM日期:", formatted_today)
+    #         file_path = f"{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx"
+    #         # 檔案存在確認
+    #         pre_execute(file_path)
 
     def confirm_dates(self):
         """note"""
@@ -181,7 +195,7 @@ class Application(tk.Frame):
         # 執行完畢後顯示按鈕
         if not os.path.exists(file_path):
             messagebox.showerror("提醒", "今日的檔案尚未生成")
-            subprocess.Popen('python srum_dump2.py')  # 生成output檔案
+            subprocess.Popen(f'python {dir_path}/srum_dump2.py')  # 生成output檔案
         else:
             self.show_buttons()
 
@@ -190,11 +204,12 @@ class Application(tk.Frame):
             顯示按鈕
         """
         # 執行顯示按鈕
+        self.select_srum_button.config(state=tk.NORMAL)
+
         self.query_energy_button.config(state=tk.NORMAL)
         self.query_cpu_button.config(state=tk.NORMAL)
         self.query_network_button.config(state=tk.NORMAL)
         self.query_cpu_table_button.config(state=tk.NORMAL)
-        self.srum_confirm_button.config(state=tk.NORMAL)
 
     def query_energy_usage(self):
         """
@@ -232,11 +247,11 @@ class Application(tk.Frame):
 
             # 繪圖
             _, ax = plt.subplots(num="電量狀態")
-            battery_line1, = ax.plot(
+            ax.plot(
                 df["Event Time Stamp"], df["DesignedCapacity"], label="DesignedCapacity", c="red", alpha=0.5)
             ax.plot(
                 df["Event Time Stamp"], df["FullChargedCapacity"], label="FullChargedCapacity", c="blue", alpha=0.5)
-            ax.plot(
+            battery_line1, = ax.plot(
                 df["Event Time Stamp"], df["Battery Level"], label="Battery Level", c="green", alpha=0.5)
 
             ax.set_xlabel('Event Time Stamp')
@@ -249,7 +264,7 @@ class Application(tk.Frame):
             # 使用 mplcursors 套件顯示數據標籤
             cursor1 = mplcursors.cursor(battery_line1, hover=True)
             cursor1.connect("add", lambda sel: sel.annotation.set_text(
-                f"DesignedCapacity: {sel.target[1]:.2f}"))
+                f"Battery Level: {sel.target[1]:.2f}"))
 
             # 計算最佳刻度
             data_min = min(df['DesignedCapacity'].min(
@@ -751,42 +766,60 @@ def get_user_name_from_sid(sid):
 
 # 執行程式
 if __name__ == "__main__":
+    
+    try:
+        print(f"{'-'*20} START {'-'*20}")
 
-    # 獲取當前目錄路徑
-    dir_path = os.path.dirname(__file__)
+        # 獲取當前目錄路徑
+        dir_path = os.path.dirname(__file__)
+        print(f"當前目錄路徑: {dir_path}")
 
-    # 獲取當前日期
-    today = datetime.now()
+        # 獲取當前日期
+        today = datetime.now()
 
-    # 將日期格式化為 "yyyymmdd"
-    formatted_today = today.strftime("%Y%m%d")
+        # 將日期格式化為 "yyyymmdd"
+        formatted_today = today.strftime("%Y%m%d")
 
-    # 讀取 config.ini 檔案
-    config = configparser.ConfigParser()
-    config_path = os.path.join(dir_path, 'config.ini')
-    config.read(config_path)
+        # 讀取 config.ini 檔案
+        # config = configparser.ConfigParser()
+        config_path = os.path.join(dir_path, 'config.yaml')
 
-    # 讀取 [Settings] 區段的各個配置設定
-    output_directory = config.get('Settings', 'output_directory')
-    output_directory = os.path.join(dir_path, output_directory)
+        # 檢查檔案是否存在
+        if not os.path.exists(config_path):
+            # print("Error: config.ini 檔案不存在")
+            # 處理檔案不存在的情況，例如拋出異常或設定默認值
+            raise Exception("config.ini 檔案不存在")
 
-    # SRUM_DUMP_OUTPUT.xlex檔案路徑
-    file_path = f"{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx"
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
 
-    # output.xlex儲存資料夾
-    if not os.path.exists(output_directory):
-        os.makedirs(output_directory)
+        # 讀取 [Settings] 區段的各個配置設定
+        output_directory = config['settings']['output_directory']
+        output_directory = os.path.join(dir_path, output_directory)
 
-    # 獲取 CPU 速度
-    cpu_info = psutil.cpu_freq()
-    cpu_speed = cpu_info.current*1000000  # CPU速度（週期/秒）ex:2300000000
-    print(f"CPU速度：{cpu_speed} Hz")
+        # SRUM_DUMP_OUTPUT.xlex檔案路徑
+        file_path = f"{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx"
 
-    # 創建 GUI
-    root = tk.Tk()
-    root.geometry("640x140")
-    root.title("系統資源監控")
-    app = Application(master=root)
+        # output.xlex儲存資料夾
+        if not os.path.exists(output_directory):
+            os.makedirs(output_directory)
 
-    # 執行程式
-    app.mainloop()
+        # 獲取 CPU 速度
+        cpu_info = psutil.cpu_freq()
+        cpu_speed = cpu_info.current*1000000  # CPU速度（週期/秒）ex:2300000000
+        print(f"CPU速度：{cpu_speed} Hz")
+
+        # 創建 GUI
+        root = tk.Tk()
+        root.geometry("640x100")
+        root.title("系統資源監控")
+        app = Application(master=root)
+
+        # 執行程式
+        app.mainloop()
+
+    except Exception as err:
+        print(f"[ERROR] {err}")
+
+    finally:
+        print(f"{'-'*20} END {'-'*20}")

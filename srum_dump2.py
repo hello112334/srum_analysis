@@ -21,7 +21,8 @@ import tempfile
 import urllib.request
 import subprocess
 import ctypes
-import configparser
+# import configparser
+import yaml
 
 # srum folder
 srum_filpath = 'C:\\Windows\\System32\\sru\\'
@@ -514,14 +515,23 @@ def extract_live_file():
 
 
 if __name__ == "__main__":
+    
+    # 獲取當前目錄路徑
+    dir_path = os.path.dirname(__file__)
+    config_path = os.path.join(dir_path, 'config.yaml')
 
-    # 讀取 config.ini 檔案
-    config = configparser.ConfigParser()
-    config.read('config.ini')
+    # 檢查檔案是否存在
+    if not os.path.exists(config_path):
+        # print("Error: config.ini 檔案不存在")
+        # 處理檔案不存在的情況，例如拋出異常或設定默認值
+        raise Exception("config.ini 檔案不存在")
+
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
 
     # 讀取 [Settings] 區段的各個配置設定
-    output_directory = config.get('Settings', 'output_directory')
-    template_file = config.get('Settings', 'template_file')
+    output_directory = os.path.join(dir_path, config['settings']['output_directory'])
+    template_file = config['settings']['template_file']
 
     parser = argparse.ArgumentParser(
         description="Given an SRUM database it will create an XLS spreadsheet with analysis of the data in the database.")
@@ -551,8 +561,10 @@ if __name__ == "__main__":
         srum_path = ""
         if os.path.exists(srum_filpath + "SRUDB.DAT"):
             srum_path = os.path.join(os.getcwd(), srum_filpath + "SRUDB.DAT")
-        temp_path = pathlib.Path.cwd() / template_file
-        if temp_path.exists():
+        # temp_path = pathlib.Path.cwd() / template_file
+        temp_path = os.path.join(dir_path, template_file)
+        print(f"template_file: {temp_path}")
+        if os.path.exists(temp_path):
             temp_path = str(temp_path)
         else:
             temp_path = ""

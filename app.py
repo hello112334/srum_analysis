@@ -20,7 +20,7 @@ from tkcalendar import DateEntry
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
-from matplotlib.ticker import MultipleLocator
+# from matplotlib.ticker import MultipleLocator
 
 # win32
 import win32api
@@ -103,18 +103,18 @@ class Application(tk.Frame):
 
         # 查詢網路流量按鈕
         self.query_network_button = ttk.Button(
-            self, text="查詢應用程式網路流量", command=self.query_network_usage, width=btn_width, state=tk.DISABLED)
+            self, text="查詢應用程式網路流量", command=lambda: self.query_network_usage(0), width=btn_width, state=tk.DISABLED)
         self.query_network_button.grid(row=1, column=2)
 
         # 查詢網路流量按鈕
         self.query_cpu_table_button = ttk.Button(
-            self, text="查詢應用程式CPU時間", command=self.query_cpu_table, width=btn_width, state=tk.DISABLED)
+            self, text="查詢應用程式CPU時間", command=lambda: self.query_cpu_table(0), width=btn_width, state=tk.DISABLED)
         self.query_cpu_table_button.grid(row=1, column=3)
 
         # 偵測異常紀錄按鈕
-        # self.detect_anomaly_button = ttk.Button(
-        #     self, text="偵測異常紀錄", command=self.detect_anomaly)
-        # self.detect_anomaly_button.grid(row=0, column=4)
+        self.detect_anomaly_button = ttk.Button(
+            self, text="偵測異常紀錄", command=lambda: [self.query_network_usage(1), self.query_cpu_table(1)], width=btn_width, state=tk.DISABLED)
+        self.detect_anomaly_button.grid(row=1, column=4)
 
         # row 3 =====================================================================================================
         # 開始日期 Label 和 Calendar
@@ -135,18 +135,6 @@ class Application(tk.Frame):
         self.end_cal = CustomDateEntry(self)
         self.end_cal.grid(row=3, column=1)
 
-        # row 5 =====================================================================================================
-        # # SRUM檔案日期選擇器
-        # self.srum_date_label = ttk.Label(self, text="SRUM檔案日期：")
-        # self.srum_date_label.grid(row=4, column=0)
-        # self.srum_cal = CustomDateEntry(self)
-        # self.srum_cal.grid(row=4, column=1)
-
-        # # SRUM檔案日期選擇確定按鈕
-        # self.srum_confirm_button = ttk.Button(
-        #     self, text="確定", command=self.confirm_srum_date, state=tk.DISABLED)
-        # self.srum_confirm_button.grid(row=4, column=2, columnspan=1)
-
         # 初期化
         self.start_date = self.start_cal.get_date()
         self.end_date = self.end_cal.get_date()
@@ -161,20 +149,6 @@ class Application(tk.Frame):
         if selected_file_path:
             print(f"Seletted: {selected_file_path}")
             file_path = selected_file_path
-
-    # def confirm_srum_date(self):
-    #     """note"""
-    #     global formatted_today, file_path
-
-    #     self.srum_date = self.srum_cal.get_date()
-
-    #     # 顯示按鈕
-    #     if not self.srum_date is None:
-    #         formatted_today = self.srum_date.strftime("%Y%m%d")
-    #         print("SRUM日期:", formatted_today)
-    #         file_path = f"{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx"
-    #         # 檔案存在確認
-    #         pre_execute(file_path)
 
     def confirm_dates(self):
         """note"""
@@ -210,6 +184,7 @@ class Application(tk.Frame):
         self.query_cpu_button.config(state=tk.NORMAL)
         self.query_network_button.config(state=tk.NORMAL)
         self.query_cpu_table_button.config(state=tk.NORMAL)
+        self.detect_anomaly_button.config(state=tk.NORMAL)
 
     def query_energy_usage(self):
         """
@@ -345,13 +320,10 @@ class Application(tk.Frame):
             df["CPU time in background"] *= 0.0000001
 
             # 繪製圖表
-            fig, ax = plt.subplots(num="CPU使用率")
+            _, ax = plt.subplots(num="CPU使用率")
             foreground_line, = ax.plot(
                 df["Srum Entry Creation"], df["CPU time in Forground"], label="CPU time in Forground", c="red", alpha=0.5)
-            background_line, = ax.plot(
-                df["Srum Entry Creation"], df["CPU time in background"], label="CPU time in background", c="blue", alpha=0.5)
-            # app_line, = ax.plot(
-            #     df["Srum Entry Creation"], df["Application"], label="Application", c="green", alpha=0.5)
+
             ax.set_xlabel("Srum Entry Creation")
             ax.set_ylabel("CPU time (normalized)")
             ax.legend()
@@ -406,11 +378,11 @@ class Application(tk.Frame):
         except Exception as e:
             messagebox.showerror("錯誤", f"{e}")
 
-    def query_network_usage(self):
+    def query_network_usage(self, type):
         """
             查詢網路流量
         """
-        print("查詢網路流量")
+        print(f"查詢網路流量 {type}")
         # 在此添加查詢網路流量的程式碼
 
         try:
@@ -438,6 +410,18 @@ class Application(tk.Frame):
             # 使用布林索引來篩選 DataFrame
             df = df[(df['SRUM ENTRY CREATION'] >= start_date)
                     & (df['SRUM ENTRY CREATION'] <= end_date)]
+            
+            # 偵測異常紀錄時篩選網路使用率
+            bytes_Sent_less = 1*10**5
+            bytes_Sent_high = 5*10**7
+            bytes_Received_less = 1*10**5
+            bytes_Received_high = 2*10**9
+
+            if type == 0:
+                print('偵測異常紀錄時篩選網路使用率')
+            elif type == 1:
+                df = df[(df['Bytes Sent'] >= bytes_Sent_high)
+                        | (df['Bytes Received'] >= bytes_Received_high)]
 
             # 如果沒有資料，則顯示錯誤訊息
             if df.empty:
@@ -477,24 +461,49 @@ class Application(tk.Frame):
                     col, text=col, command=lambda _col=col: sort_column(table, _col, False))
 
             # 將資料填入表格中
+            tag_counts = {'low': 0, 'normal': 0, 'high': 0}
             for index, row in df.iterrows():
-                table.insert(parent='', index='end', iid=index,
-                             text='', values=list(row))
+                if row['Bytes Sent'] >= bytes_Sent_high or row['Bytes Received'] >= bytes_Received_high:
+                    table.insert(parent='', index='end', iid=index,
+                                 text='', values=list(row), tags=('high'))
+                    tag_counts['high'] += 1
+                elif row['Bytes Sent'] >= bytes_Sent_less or row['Bytes Received'] >= bytes_Received_less:
+                    table.insert(parent='', index='end', iid=index,
+                                 text='', values=list(row), tags=('normal'))
+                    tag_counts['normal'] += 1
+                else:
+                    table.insert(parent='', index='end', iid=index,
+                                 text='', values=list(row), tags=('low'))
+                    tag_counts['low'] += 1
 
             # 調整表格大小
             table.pack(fill='both', expand=True)
 
-            # 執行 GUI
-            root_network_usege.mainloop()
+            # 設定不同的背景顏色
+            table.tag_configure('low', background='#90EE90') # 綠
+            table.tag_configure('normal', background='#FFFACD') # 黃
+            table.tag_configure('high', background='#FF6347') # 紅
+
+            # 顯示圓餅圖
+            if type == 0:
+                labels = tag_counts.keys()
+                sizes = tag_counts.values()
+                colors = ['#90EE90', '#FFFACD', '#FF6347']  # 綠、黃、紅
+
+                _, ax1 = plt.subplots()
+                ax1.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%',
+                        startangle=90)
+                ax1.axis('equal')  # 使圓餅圖比例相等
+                plt.show()
 
         except Exception as e:
             messagebox.showerror("錯誤", f"{e}")
 
-    def query_cpu_table(self):
+    def query_cpu_table(self, type):
         """
             查詢CPU使用率(表格)
         """
-        print("查詢CPU使用率(表格)")
+        print(f"查詢CPU使用率(表格) {type}")
         # 在此添加查詢CPU使用率(表格)的程式碼
 
         try:
@@ -523,20 +532,32 @@ class Application(tk.Frame):
             # 使用布林索引來篩選 DataFrame
             df = df[(df['Srum Entry Creation'] >= start_date)
                     & (df['Srum Entry Creation'] <= end_date)]
+            
+            # 偵測異常紀錄時篩選CPU使用率
+            cpu_Forground_less = 1*10**9
+            cpu_Forground_high = 4*10**12
+            cpu_background_less = 1*10**6
+            cpu_background_high = 4*10**11
+
+            if type == 0:
+                print("偵測異常紀錄時篩選CPU使用率")
+            elif type == 1:
+                df = df[(df['CPU time in Forground'] >= cpu_Forground_high)
+                        | (df['CPU time in background'] >= cpu_background_high)]
 
             # 如果沒有資料，則顯示錯誤訊息
             if df.empty:
                 raise Exception('此範圍區間沒有資料')
 
             # 建立 GUI
-            root_network_usege = tk.Tk()
-            root_network_usege.title('CPU使用率(表格)')
+            root_cpu_usege = tk.Tk()
+            root_cpu_usege.title('CPU使用率(表格)')
 
             # 建立表格
-            table = ttk.Treeview(root_network_usege)
+            table = ttk.Treeview(root_cpu_usege)
 
             # 設定捲軸
-            vsb = ttk.Scrollbar(root_network_usege,
+            vsb = ttk.Scrollbar(root_cpu_usege,
                                 orient="vertical", command=table.yview)
             vsb.pack(side='right', fill='y')
             table.configure(yscrollcommand=vsb.set)
@@ -562,85 +583,43 @@ class Application(tk.Frame):
                     col, text=col, command=lambda _col=col: sort_column(table, _col, False))
 
             # 將資料填入表格中
+            tag_counts = {'low': 0, 'normal': 0, 'high': 0}
             for index, row in df.iterrows():
-                table.insert(parent='', index='end', iid=index,
-                             text='', values=list(row))
+                if row['CPU time in Forground'] >= cpu_Forground_high or row['CPU time in background'] >= cpu_background_high:
+                    table.insert(parent='', index='end', iid=index,
+                                 text='', values=list(row), tags=('high'))
+                    tag_counts['high'] += 1
+                elif row['CPU time in Forground'] >= cpu_Forground_less or row['CPU time in background'] >= cpu_background_less:
+                    table.insert(parent='', index='end', iid=index,
+                                 text='', values=list(row), tags=('normal'))
+                    tag_counts['normal'] += 1
+                else:
+                    table.insert(parent='', index='end', iid=index,
+                                 text='', values=list(row), tags=('low'))
+                    tag_counts['low'] += 1
 
             # 調整表格大小
             table.pack(fill='both', expand=True)
 
-            # 執行 GUI
-            root_network_usege.mainloop()
+            # 設定不同的背景顏色
+            table.tag_configure('low', background='#90EE90') # 綠
+            table.tag_configure('normal', background='#FFFACD') # 黃
+            table.tag_configure('high', background='#FF6347') # 紅
+
+            # 顯示圓餅圖
+            if type == 0:
+                labels = tag_counts.keys()
+                sizes = tag_counts.values()
+                colors = ['#90EE90', '#FFFACD', '#FF6347']  # 綠、黃、紅
+
+                _, ax1 = plt.subplots()
+                ax1.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%',
+                        startangle=90)
+                ax1.axis('equal')  # 使圓餅圖比例相等
+                plt.show()
 
         except Exception as e:
             messagebox.showerror("錯誤", f"{e}")
-
-    # def detect_anomaly(self):
-    #     """
-    #         偵測異常紀錄
-    #     """
-    #     print("偵測異常紀錄")
-    #     # 在此添加偵測異常紀錄的程式碼
-
-    #     try:
-    #         # 執行前處理
-    #         pre_execute(file_path)
-
-    #         # 讀取 Excel 檔案
-    #         df = pd.read_excel(
-    #             file_path, sheet_name="Application Resource Usage")
-
-    #         # 篩選符合條件的資料
-    #         filtered_df = df[df["CPU time in Forground"]/cpu_speed > 1000]
-    #         filtered_df = filtered_df[[
-    #             "Srum Entry Creation", "Application", "User SID", "CPU time in Forground"]]
-    #         filtered_df = filtered_df.reset_index(drop=True)
-    #         filtered_df["User SID"] = filtered_df["User SID"].apply(
-    #             map_user_sid)
-
-    #         # 創建新視窗，顯示篩選後的資料
-    #         if len(filtered_df) == 0:
-    #             # result_label.config(text="No data found")
-    #             print("Error: Could not read file")
-    #         else:
-    #             # root = tk.Tk()
-    #             new_window = tk.Tk()
-    #             new_window.title("Filtered Data")
-
-    #             # 創建 Treeview 元件
-    #             tree = ttk.Treeview(new_window, selectmode='browse')
-    #             tree.pack(fill='both', expand=True)
-
-    #             # 設定欄位
-    #             tree["columns"] = ["Srum Entry Creation",
-    #                                "Application", "User SID", "CPU time in Forground"]
-    #             tree.column("#0", width=0, stretch=tk.NO)
-    #             tree.column("Srum Entry Creation", width=150,
-    #                         minwidth=50, anchor=tk.CENTER)
-    #             tree.column("Application", width=150,
-    #                         minwidth=50, anchor=tk.CENTER)
-    #             tree.column("User SID", width=150,
-    #                         minwidth=50, anchor=tk.CENTER)
-    #             tree.column("CPU time in Forground", width=150,
-    #                         minwidth=50, anchor=tk.CENTER)
-
-    #             # 設定欄位標題
-    #             tree.heading("Srum Entry Creation",
-    #                          text="Srum Entry Creation", anchor=tk.CENTER)
-    #             tree.heading("Application", text="Application",
-    #                          anchor=tk.CENTER)
-    #             tree.heading("User SID", text="User SID", anchor=tk.CENTER)
-    #             tree.heading("CPU time in Forground/2300000000",
-    #                          text="CPU time in Forground(S)", anchor=tk.CENTER)
-
-    #             # 加入資料
-    #             for i, row in filtered_df.iterrows():
-    #                 tree.insert("", i, values=tuple(row))
-
-    #         root.mainloop()
-
-    #     except:
-    #         messagebox.showerror("錯誤", "這個範圍區間沒有資料")
 
 
 def pre_execute(get_file_path):
@@ -781,7 +760,6 @@ if __name__ == "__main__":
         formatted_today = today.strftime("%Y%m%d")
 
         # 讀取 config.ini 檔案
-        # config = configparser.ConfigParser()
         config_path = os.path.join(dir_path, 'config.yaml')
 
         # 檢查檔案是否存在
@@ -811,7 +789,7 @@ if __name__ == "__main__":
 
         # 創建 GUI
         root = tk.Tk()
-        root.geometry("640x100")
+        root.geometry("720x100")
         root.title("系統資源監控")
         app = Application(master=root)
 

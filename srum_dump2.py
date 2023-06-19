@@ -348,8 +348,19 @@ def format_output(val, eachformat, eachstyle, xls_sheet):
 
 def process_srum(ese_db, target_wb):
     """Process all the tables and columns in the ESE database"""
-    total_recs = sum(
-        [x.number_of_records for x in ese_db.tables if x.name not in skip_tables])
+
+    total_recs = 0
+    for x in ese_db.tables:
+        if x.name in skip_tables:
+            continue
+        try:
+            total_recs += x.number_of_records
+        except Exception as err:
+            print(f"[ERROR] {x.name} {err}")
+
+    # total_recs = sum(
+    #     [x.number_of_records for x in ese_db.tables if x.name not in skip_tables])
+
     if not options.quiet:
         print("Processing {} records across {} tables".format(
             total_recs, ese_db.number_of_tables-len(skip_tables)))
@@ -363,9 +374,12 @@ def process_srum(ese_db, target_wb):
             tname = ese_table.name[1:15]
 
         if not options.quiet:
-            print("\nNow dumping table {} containing {} rows".format(
-                tname, ese_table.number_of_records))
-            print("While you wait, did you know ...\n {} \n".format(next(ads)))
+            try:
+                print("\nNow dumping table {} containing {} rows".format(
+                    tname, ese_table.number_of_records))
+                print("While you wait, did you know ...\n {} \n".format(next(ads)))
+            except Exception as err:
+                print(err)
 
         xls_sheet = target_wb.create_sheet(title=tname)
 
@@ -531,13 +545,15 @@ if __name__ == "__main__":
 
     # 讀取 [Settings] 區段的各個配置設定
     output_directory = os.path.join(dir_path, config['settings']['output_directory'])
+    output_file = os.path.join(output_directory, f"SRUM_DUMP_OUTPUT_{formatted_today}.xlsx")
     template_file = config['settings']['template_file']
+    print(f"output_file: {output_file}")
 
     parser = argparse.ArgumentParser(
         description="Given an SRUM database it will create an XLS spreadsheet with analysis of the data in the database.")
     parser.add_argument("--SRUM_INFILE", "-i",
                         help="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
-    parser.add_argument("--XLSX_OUTFILE", "-o", default=f"{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx",
+    parser.add_argument("--XLSX_OUTFILE", "-o", default=output_file,
                         help="Full path to the XLS file that will be created.")
     parser.add_argument("--XLSX_TEMPLATE", "-t",
                         help="The Excel Template that specifies what data to extract from the srum database. You can create template_tables with ese_template.py.")
@@ -560,7 +576,7 @@ if __name__ == "__main__":
         # init
         srum_path = ""
         if os.path.exists(srum_filpath + "SRUDB.DAT"):
-            srum_path = os.path.join(os.getcwd(), srum_filpath + "SRUDB.DAT")
+            srum_path = os.path.join(dir_path, srum_filpath + "SRUDB.DAT")
         # temp_path = pathlib.Path.cwd() / template_file
         temp_path = os.path.join(dir_path, template_file)
         print(f"template_file: {temp_path}")
@@ -570,14 +586,14 @@ if __name__ == "__main__":
             temp_path = ""
         reg_path = ""
         if os.path.exists("SOFTWARE"):
-            reg_path = os.path.join(os.getcwd(), "SOFTWARE")
+            reg_path = os.path.join(dir_path, "SOFTWARE")
 
         sg.ChangeLookAndFeel('Kayak')
         layout = [[sg.Text('REQUIRED: Path to SRUDB.DAT')],
                 [sg.Input(srum_path, key="_SRUMPATH_", enable_events=True),
                 sg.FileBrowse(target="_SRUMPATH_")],
                 [sg.Text('REQUIRED: Output folder for SRUM_DUMP_OUTPUT.xlsx')],
-                [sg.Input(os.getcwd(), key='_OUTDIR_'),
+                [sg.Input(output_directory, key='_OUTDIR_'),
                     sg.FolderBrowse(target='_OUTDIR_')],
                 [sg.Text('REQUIRED: Path to SRUM_DUMP Template')],
                 [sg.Input(temp_path, key="_TEMPATH_"),
@@ -628,8 +644,9 @@ if __name__ == "__main__":
 
         window.Close()
         options.SRUM_INFILE = str(pathlib.Path(values.get("_SRUMPATH_")))
-        options.XLSX_OUTFILE = str(pathlib.Path(
-            values.get("_OUTDIR_")) / f"{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx")
+        # options.XLSX_OUTFILE = str(pathlib.Path(
+        #     values.get("_OUTDIR_")) / f"{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx")
+        options.XLSX_OUTFILE = output_file
         options.XLSX_TEMPLATE = str(pathlib.Path(values.get("_TEMPATH_")))
         options.reghive = str(pathlib.Path(values.get("_REGPATH_")))
         if options.reghive == ".":
@@ -638,7 +655,8 @@ if __name__ == "__main__":
         if not options.XLSX_TEMPLATE:
             options.XLSX_TEMPLATE = template_file
         if not options.XLSX_OUTFILE:
-            options.XLSX_OUTFILE = f"{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx"
+            # options.XLSX_OUTFILE = f"{output_directory}/SRUM_DUMP_OUTPUT_{formatted_today}.xlsx"
+            options.XLSX_OUTFILE = output_file
         if not os.path.exists(options.SRUM_INFILE):
             print("ESE File Not found: "+options.SRUM_INFILE)
             sys.exit(1)

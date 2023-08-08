@@ -27,6 +27,11 @@ import win32api
 import win32security
 import psutil
 
+# google drive
+from pydrive.auth import GoogleAuth
+from pydrive.drive import GoogleDrive
+from oauth2client.service_account import ServiceAccountCredentials
+
 class CustomToolbar(NavigationToolbar2Tk):
     """
     自定義工具列
@@ -173,6 +178,9 @@ class Application(tk.Frame):
         else:
             self.show_buttons()
 
+            # 上傳檔案到 Google Drive
+            upload_file(f"SRUM_DUMP_OUTPUT_{formatted_today}.xlsx", file_path)
+
     def show_buttons(self):
         """
             顯示按鈕
@@ -316,13 +324,15 @@ class Application(tk.Frame):
 
             # 1.計算應用程序的CPU時間消耗(秒)
             # unit: 0.0000001 秒
-            df["CPU time in Forground"] *= 0.0000001
-            df["CPU time in background"] *= 0.0000001
+            # df["CPU time in Forground"] *= 0.0000001
+            # df["CPU time in background"] *= 0.0000001
 
             # 繪製圖表
             _, ax = plt.subplots(num="CPU使用率")
             foreground_line, = ax.plot(
                 df["Srum Entry Creation"], df["CPU time in Forground"], label="CPU time in Forground", c="red", alpha=0.5)
+            _, = ax.plot(
+                df["Srum Entry Creation"], df["CPU time in background"], label="CPU time in background", c="blue", alpha=0.5)
 
             ax.set_xlabel("Srum Entry Creation")
             ax.set_ylabel("CPU time (normalized)")
@@ -333,7 +343,7 @@ class Application(tk.Frame):
 
             @cursor1.connect("add")
             def on_add(sel):
-                i = int(sel.target.index)
+                i = int(sel.index)
                 cpu_front = df.iloc[i, 4]
                 app_name = df.iloc[i, 2]  # 提取名字 Application
 
@@ -491,7 +501,7 @@ class Application(tk.Frame):
                 colors = ['#90EE90', '#FFFACD', '#FF6347']  # 綠、黃、紅
 
                 _, ax1 = plt.subplots()
-                ax1.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%',
+                ax1.pie(sizes, labels=labels, colors=colors, autopct='%1.2f%%',
                         startangle=90)
                 ax1.axis('equal')  # 使圓餅圖比例相等
                 plt.show()
@@ -613,7 +623,7 @@ class Application(tk.Frame):
                 colors = ['#90EE90', '#FFFACD', '#FF6347']  # 綠、黃、紅
 
                 _, ax1 = plt.subplots()
-                ax1.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%',
+                ax1.pie(sizes, labels=labels, colors=colors, autopct='%1.2f%%',
                         startangle=90)
                 ax1.axis('equal')  # 使圓餅圖比例相等
                 plt.show()
@@ -654,19 +664,19 @@ def calculate_ticks(min_value, max_value):
     while True:
         for s in scales:
             interval = scale * s
-            num_ticks = range_value / interval
+            num_ticks = range_value / interval if interval != 0 else 0
             if 2 <= num_ticks <= 5:
-                min_tick = np.floor(min_value / interval) * interval
-                max_tick = np.ceil(max_value / interval) * interval
+                min_tick = np.floor(min_value / interval) * interval if interval != 0 else min_value
+                max_tick = np.ceil(max_value / interval) * interval if interval != 0 else max_value
 
                 # 檢查最大刻度與數據最大值的比例
-                ratio = (max_tick - max_value) / max_value
+                ratio = (max_tick - max_value) / max_value if max_value != 0 else 0
                 if ratio <= 0.1:
                     max_tick += interval
 
                 # 檢查最小刻度與數據最小值的比例
-                ratio = (min_value - min_tick) / min_value
-                if ratio <= 0.1:
+                ratio = (min_value - min_tick) / min_value if min_value != 0 else 0
+                if ratio <= 0.1 and min_tick > 0:
                     min_tick -= interval
 
                 return min_tick, max_tick, interval
@@ -676,6 +686,7 @@ def calculate_ticks(min_value, max_value):
             break
         else:
             ck_time += 1
+
 
 
 def sort_column(tree, col, reverse):
@@ -742,6 +753,42 @@ def get_user_name_from_sid(sid):
     except:
         return None
 
+def upload_file(filename, filepath):
+    """ 上傳檔案到 Google Drive """
+
+    # 設定 Google Drive API 金鑰檔案路徑
+    gauth = GoogleAuth()
+
+    # Try to load saved client credentials
+    if os.path.isfile("mycreds.txt"):
+        gauth.LoadCredentialsFile("mycreds.txt")
+
+    if gauth.credentials is None:
+        gauth.LocalWebserverAuth()
+        gauth.SaveCredentialsFile("mycreds.txt")
+    elif gauth.access_token_expired:
+        gauth.Refresh()
+        gauth.SaveCredentialsFile("mycreds.txt")
+    else:
+        gauth.Authorize()
+    
+    # 建立 Google Drive 連線
+    drive = GoogleDrive(gauth)
+    FOLDER_ID = "1LBIoTDKmNjihOsLx52tr3Px-8rRGB1az" # 資料夾 ID
+    
+    # 取得檔案清單
+    file_list = drive.ListFile({'q': "'{}' in parents".format(FOLDER_ID)}).GetList()
+    
+    # 檢查檔案是否已存在
+    for file in file_list:
+        if file['title'] == filename:
+            print(f'檔案已存在 Google Drive: {filename}')
+            break
+    else:
+        file = drive.CreateFile({'title': filename, "parents": [{"id": FOLDER_ID}]})
+        file.SetContentFile(filepath)
+        file.Upload()
+        print(f"檔案已上傳至 Google Drive: {filename}")
 
 # 執行程式
 if __name__ == "__main__":
